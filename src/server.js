@@ -1,6 +1,7 @@
 // Node.js/Express port of ../../app.py - same routes, same behavior, so the
 // existing static/index.html + login.html frontend works unmodified against
 // either backend.
+import "./env-shim.js"; // must run before anything that touches os.homedir()
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import dotenv from "dotenv";
