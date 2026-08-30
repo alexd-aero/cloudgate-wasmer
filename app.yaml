@@ -1,0 +1,23 @@
+# Wasmer Edge app manifest.
+#
+# NOTE: I couldn't test an actual `wasmer deploy` here (no Wasmer CLI/account
+# available in this environment), so treat this as a best-effort starting
+# point rather than a verified config - check it against
+# https://docs.wasmer.io/edge/apps before deploying, in case the schema has
+# moved on since.
+kind: wasmer.io/App.v0
+name: cloudgate-client
+package: .
+
+# Wasmer Edge's Node.js runtime runs `npm install` then the package.json
+# "start" script, and expects the app to listen on $PORT.
+capabilities:
+  http:
+    ingress: true
+
+# CLOUDGATE_EMAIL / CLOUDGATE_REFRESH_TOKEN are set as environment
+# variables in the Wasmer dashboard (App > Settings > Environment
+# Variables) - never committed here. credentials.json auto-rotation is a
+# nice-to-have on top of that if Wasmer's filesystem happens to persist
+# across invocations; if you confirm a persistent volume path for your
+# plan, set CLOUDGATE_STATE_DIR to it here.
