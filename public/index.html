@@ -223,7 +223,9 @@
   .link-field-row input {
     flex: 1; min-width: 0; background: var(--glass-strong); border: 1px solid var(--glass-border);
     border-radius: var(--radius-sm); color: var(--text); padding: 9px 10px; font-size: 12px; font-family: monospace;
+    cursor: pointer;
   }
+  .link-field-row input:hover { border-color: var(--accent); color: var(--accent-hover); }
   .link-field-row button { padding: 8px 12px; }
 
   /* New category modal */
@@ -262,7 +264,9 @@
   #editor-raw-url {
     background: var(--glass-strong); border: 1px solid var(--glass-border); border-radius: 8px;
     color: var(--text-dim); padding: 7px 10px; font-size: 11px; font-family: monospace; width: 260px;
+    cursor: pointer;
   }
+  #editor-raw-url:hover { border-color: var(--accent); color: var(--accent-hover); }
   #editor-header-actions { display: flex; align-items: center; gap: 8px; }
   #editor-header button { padding: 8px 12px; font-size: 12px; }
   #ace-editor-container { flex: 1; min-height: 0; }
@@ -609,8 +613,14 @@ function confirmModal(message) {
 
 const linkModalOverlay = document.getElementById("link-modal-overlay");
 function showRawUrlModal(f) {
-  document.getElementById("link-url-input").value = f.url;
-  document.getElementById("link-stream-input").value = window.location.origin + f.stream_path;
+  const urlInput = document.getElementById("link-url-input");
+  const streamInput = document.getElementById("link-stream-input");
+  urlInput.value = f.url;
+  streamInput.value = window.location.origin + f.stream_path;
+  // Clicking the URL text itself opens it in a new tab, same as the "Open"
+  // button - a plain readonly <input> doesn't navigate on click otherwise.
+  urlInput.onclick = () => window.open(urlInput.value, "_blank");
+  streamInput.onclick = () => window.open(streamInput.value, "_blank");
   linkModalOverlay.classList.add("active");
 }
 document.getElementById("link-close-btn").onclick = () => linkModalOverlay.classList.remove("active");
@@ -695,7 +705,9 @@ function ensureAceEditor() {
 async function openEditor(f) {
   editorCurrentFile = f;
   document.getElementById("editor-title").textContent = f.filename;
-  document.getElementById("editor-raw-url").value = f.url;
+  const rawUrlInput = document.getElementById("editor-raw-url");
+  rawUrlInput.value = f.url;
+  rawUrlInput.onclick = () => window.open(rawUrlInput.value, "_blank");
   editorOverlay.classList.add("active");
   const editor = ensureAceEditor();
   editor.setValue("Loading...", -1);
