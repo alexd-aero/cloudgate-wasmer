@@ -827,8 +827,9 @@ function finishProgress(success, message) {
 // Files at/under this go via a single presigned PUT (multipart isn't worth
 // its overhead, and S3 requires parts >= 5 MB anyway). Bigger files use a
 // parallel chunked (multipart) upload.
-const MULTIPART_THRESHOLD = 8 * 1024 * 1024;
-const MULTIPART_CONCURRENCY = 4; // parts uploading at once - the actual speedup
+const MULTIPART_THRESHOLD = 6 * 1024 * 1024;
+const MULTIPART_CONCURRENCY = 6; // parts in flight at once - the actual speedup
+                                 // when a single stream can't saturate the uplink
 
 async function uploadWithProgress(file, category, subPath) {
   try {

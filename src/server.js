@@ -231,7 +231,7 @@ app.post(
 
 // Chunked/parallel upload (multipart). create -> browser PUTs parts
 // concurrently -> complete.
-const MULTIPART_PART_SIZE = 8 * 1024 * 1024; // 8 MB (S3 minimum part size is 5 MB)
+const MULTIPART_PART_SIZE = 6 * 1024 * 1024; // 6 MB (S3 minimum part size is 5 MB)
 
 app.post(
   "/api/upload/multipart/create",
