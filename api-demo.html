@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CloudGate API Demo</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px; max-width: 900px; margin-inline: auto;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0e0e12; color: #f2f2f5; line-height: 1.5;
+  }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  p.sub { color: #9a9aa5; font-size: 13px; margin-top: 0; }
+  .base-url-row { display: flex; gap: 8px; margin: 16px 0 28px; }
+  .base-url-row input {
+    flex: 1; background: #1a1a22; border: 1px solid #2a2a33; color: #f2f2f5;
+    padding: 9px 12px; border-radius: 8px; font-family: monospace; font-size: 13px;
+  }
+  section {
+    background: #17171d; border: 1px solid #2a2a33; border-radius: 12px;
+    padding: 18px 20px; margin-bottom: 18px;
+  }
+  section h2 { font-size: 15px; margin: 0 0 4px; }
+  section .endpoint { font-family: monospace; font-size: 12px; color: #9a9aa5; margin-bottom: 12px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+  .row input, .row select {
+    background: #1a1a22; border: 1px solid #2a2a33; color: #f2f2f5;
+    padding: 7px 10px; border-radius: 6px; font-size: 13px; min-width: 140px;
+  }
+  .row input[type="file"] { min-width: unset; }
+  button {
+    background: #7c6df2; border: none; color: white; padding: 8px 14px;
+    border-radius: 6px; font-size: 13px; cursor: pointer; font-weight: 600;
+  }
+  button:hover { background: #9186f5; }
+  button.danger { background: #f2695f; }
+  pre.output {
+    background: #0a0a0e; border: 1px solid #2a2a33; border-radius: 8px;
+    padding: 10px 12px; font-size: 12px; overflow-x: auto; margin: 10px 0 0;
+    max-height: 260px; overflow-y: auto; white-space: pre-wrap; word-break: break-all;
+  }
+  a.raw-link { color: #7c6df2; font-size: 12px; }
+  textarea {
+    width: 100%; min-height: 100px; background: #0a0a0e; color: #f2f2f5;
+    border: 1px solid #2a2a33; border-radius: 8px; padding: 8px; font-family: monospace;
+    font-size: 12px; margin-top: 8px;
+  }
+  .note {
+    background: #1a1a22; border-left: 3px solid #7c6df2; padding: 8px 12px;
+    font-size: 12px; color: #c8c8d0; border-radius: 0 6px 6px 0; margin-top: 10px;
+  }
+  .note b { color: #f2f2f5; }
+  .upload-progress-wrap { display: none; margin: 12px 0 4px; }
+  .upload-progress-wrap.active { display: block; }
+  .upload-progress-bar {
+    height: 8px; background: #0a0a0e; border: 1px solid #2a2a33;
+    border-radius: 6px; overflow: hidden;
+  }
+  #upload-progress-fill {
+    height: 100%; width: 0%; border-radius: 6px;
+    background: linear-gradient(90deg, #7c6df2, #4285F4); transition: width 0.15s ease;
+  }
+  #upload-progress-fill.indeterminate {
+    width: 40% !important; animation: indet 1s infinite ease-in-out;
+  }
+  #upload-progress-fill.done { background: linear-gradient(90deg, #34A853, #24C1E0); }
+  #upload-progress-fill.failed { background: #f2695f; }
+  @keyframes indet { 0% { margin-left: -40%; } 100% { margin-left: 100%; } }
+  #upload-progress-label { font-size: 12px; color: #9a9aa5; margin-top: 6px; }
+</style>
+</head>
+<body>
+
+<h1>CloudGate API Demo</h1>
+<p class="sub">One HTML file, no build step - exercises every endpoint in API_DOCS.md against a live deployed CloudGate client. Open this file directly (double-click it) - CORS is enabled on the API so it works from file:// too.</p>
+
+<div class="base-url-row">
+  <input id="base-url" value="https://cloudgate-wsmr.wasmer.app">
+  <button onclick="run('profile')">Test connection</button>
+</div>
+
+<section>
+  <h2>Account</h2>
+  <div class="endpoint">GET /api/profile · GET /api/stats · GET /api/quota</div>
+  <div class="row">
+    <button onclick="run('profile')">Profile</button>
+    <button onclick="run('stats')">Stats</button>
+    <button onclick="run('quota')">Quota</button>
+  </div>
+  <div class="note">
+    Stats and quota are computed by walking every category (built-in
+    <i>and</i> custom) - CloudGate's own metadata service only knows its
+    seven built-in folders, so anything in a custom category like
+    <code>100gig-strg</code> is counted here but wouldn't show in CloudGate's
+    native totals.
+  </div>
+  <pre class="output" id="out-account"></pre>
+</section>
+
+<section>
+  <h2>Categories</h2>
+  <div class="endpoint">GET / POST / DELETE /api/categories</div>
+  <div class="row">
+    <button onclick="run('categories')">List categories</button>
+  </div>
+  <div class="row">
+    <input id="cat-id" placeholder="id (e.g. my-stuff)">
+    <input id="cat-label" placeholder="label (e.g. My Stuff)">
+    <input id="cat-icon" placeholder="icon (e.g. fa-solid fa-star)" style="min-width:200px">
+    <input id="cat-color" placeholder="#7c6df2" style="min-width:80px">
+    <button onclick="createCategory()">Create</button>
+  </div>
+  <div class="row">
+    <input id="cat-del-id" placeholder="id to delete">
+    <button class="danger" onclick="deleteCategory()">Delete category</button>
+  </div>
+  <pre class="output" id="out-categories"></pre>
+</section>
+
+<section>
+  <h2>Browse files</h2>
+  <div class="endpoint">GET /api/browse?category=&path= · GET /api/all-files</div>
+  <div class="row">
+    <input id="browse-category" placeholder="category (e.g. image)" value="image">
+    <input id="browse-path" placeholder="path (optional, e.g. Vacation)">
+    <button onclick="browse()">Browse</button>
+    <button onclick="run('all-files')">All files (recursive)</button>
+  </div>
+  <pre class="output" id="out-browse"></pre>
+</section>
+
+<section>
+  <h2>Folders</h2>
+  <div class="endpoint">POST /api/folders · POST /api/folders/rename · DELETE /api/folders</div>
+  <div class="row">
+    <input id="folder-category" placeholder="category" value="image">
+    <input id="folder-path" placeholder="path (optional)">
+    <input id="folder-name" placeholder="folder name">
+    <button onclick="createFolder()">Create folder</button>
+  </div>
+  <div class="row">
+    <input id="folder-old-name" placeholder="old name">
+    <input id="folder-new-name" placeholder="new name">
+    <button onclick="renameFolder()">Rename</button>
+    <button class="danger" onclick="deleteFolder()">Delete (recursive)</button>
+  </div>
+  <pre class="output" id="out-folders"></pre>
+</section>
+
+<section>
+  <h2>Files - upload</h2>
+  <div class="endpoint">POST /api/upload/multipart/create · complete · abort · POST /api/upload/presign · POST /api/upload</div>
+  <div class="row">
+    <input id="upload-category" placeholder="category" value="100gig-strg">
+    <input id="upload-path" placeholder="path (optional)">
+    <input type="file" id="upload-file">
+  </div>
+  <div class="row">
+    <button onclick="uploadFileAuto()">Upload (auto - chunked if large) ⭐</button>
+    <button onclick="uploadFileSingle()">Force single PUT</button>
+    <button onclick="uploadFileLegacy()">Via server (slow, small only)</button>
+  </div>
+  <div class="upload-progress-wrap" id="upload-progress-wrap">
+    <div class="upload-progress-bar"><div id="upload-progress-fill"></div></div>
+    <div id="upload-progress-label"></div>
+  </div>
+  <div class="note">
+    <b>The auto path is what the app uses.</b> Files over 6&nbsp;MB are split
+    into 6&nbsp;MB parts and uploaded <b>6 at a time in parallel</b> straight
+    to S3 (create &rarr; parallel PUTs &rarr; complete), then the server
+    finalizes by reading each part's ETag with <code>ListParts</code> - so the
+    browser never needs the ETag response header (which cross-origin CORS may
+    hide). Several streams at once is dramatically faster when a single
+    connection is throttled below your available uplink. Smaller files take
+    the single presigned PUT. The via-server route buffers the whole file in
+    the function's memory and fails on anything large - kept only for contrast.
+  </div>
+  <pre class="output" id="out-files"></pre>
+</section>
+
+<section>
+  <h2>Files - exists / rename / delete</h2>
+  <div class="endpoint">GET /api/files/exists · POST /api/files/rename · DELETE /api/files</div>
+  <div class="row">
+    <input id="exists-key" placeholder="full key to check" style="min-width:320px">
+    <button onclick="checkExists()">Check exists</button>
+  </div>
+  <div class="row">
+    <input id="rename-key" placeholder="full key (from a browse/upload response)" style="min-width:320px">
+    <input id="rename-new-name" placeholder="new filename">
+    <button onclick="renameFile()">Rename</button>
+  </div>
+  <div class="row">
+    <input id="delete-key" placeholder="full key to delete" style="min-width:320px">
+    <button class="danger" onclick="deleteFile()">Delete file</button>
+  </div>
+  <pre class="output" id="out-files2"></pre>
+</section>
+
+<section>
+  <h2>Download &amp; stream links</h2>
+  <div class="endpoint">GET /api/download?key= · GET /api/stream/&lt;filename&gt;?key=</div>
+  <div class="row">
+    <input id="link-key" placeholder="full key" style="min-width:320px">
+    <button onclick="buildLinks()">Build links</button>
+  </div>
+  <div id="link-output"></div>
+  <div class="note">
+    Both links open fine when pasted into a new tab. Don't wire these to a
+    script-triggered <code>window.open()</code> for media files though -
+    Chrome downloads instead of playing/displaying them when the tab is
+    opened programmatically rather than by a real navigation. Copy the link
+    and open it yourself instead.
+  </div>
+</section>
+
+<section>
+  <h2>Text/code file content</h2>
+  <div class="endpoint">GET /api/files/content?key= · PUT /api/files/content</div>
+  <div class="row">
+    <input id="content-key" placeholder="full key of a text/code file" style="min-width:320px">
+    <button onclick="getContent()">Get content</button>
+  </div>
+  <textarea id="content-text" placeholder="file content appears here - edit it, then Save"></textarea>
+  <div class="row" style="margin-top:8px">
+    <button onclick="putContent()">Save</button>
+  </div>
+  <pre class="output" id="out-content"></pre>
+</section>
+
+<script>
+function baseUrl() { return document.getElementById("base-url").value.replace(/\/$/, ""); }
+
+async function api(path, opts) {
+  const res = await fetch(baseUrl() + path, opts);
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || res.statusText);
+  return body;
+}
+
+function show(id, data) {
+  document.getElementById(id).textContent = JSON.stringify(data, null, 2);
+}
+function showError(id, e) {
+  document.getElementById(id).textContent = "Error: " + e.message;
+}
+
+async function run(which) {
+  const endpoints = { profile: "/api/profile", stats: "/api/stats", quota: "/api/quota", "all-files": "/api/all-files", categories: "/api/categories" };
+  const outId = which === "categories" ? "out-categories" : which === "all-files" ? "out-browse" : "out-account";
+  try {
+    show(outId, await api(endpoints[which]));
+  } catch (e) {
+    showError(outId, e);
+  }
+}
+
+async function createCategory() {
+  try {
+    show("out-categories", await api("/api/categories", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        id: document.getElementById("cat-id").value,
+        label: document.getElementById("cat-label").value,
+        icon: document.getElementById("cat-icon").value,
+        color: document.getElementById("cat-color").value,
+      }),
+    }));
+  } catch (e) { showError("out-categories", e); }
+}
+
+async function deleteCategory() {
+  try {
+    show("out-categories", await api("/api/categories", {
+      method: "DELETE",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({id: document.getElementById("cat-del-id").value}),
+    }));
+  } catch (e) { showError("out-categories", e); }
+}
+
+async function browse() {
+  const category = encodeURIComponent(document.getElementById("browse-category").value);
+  const path = encodeURIComponent(document.getElementById("browse-path").value);
+  try {
+    show("out-browse", await api(`/api/browse?category=${category}&path=${path}`));
+  } catch (e) { showError("out-browse", e); }
+}
+
+async function createFolder() {
+  try {
+    show("out-folders", await api("/api/folders", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        category: document.getElementById("folder-category").value,
+        path: document.getElementById("folder-path").value,
+        name: document.getElementById("folder-name").value,
+      }),
+    }));
+  } catch (e) { showError("out-folders", e); }
+}
+
+async function renameFolder() {
+  try {
+    show("out-folders", await api("/api/folders/rename", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        category: document.getElementById("folder-category").value,
+        path: document.getElementById("folder-path").value,
+        old_name: document.getElementById("folder-old-name").value,
+        new_name: document.getElementById("folder-new-name").value,
+      }),
+    }));
+  } catch (e) { showError("out-folders", e); }
+}
+
+async function deleteFolder() {
+  try {
+    show("out-folders", await api("/api/folders", {
+      method: "DELETE",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        category: document.getElementById("folder-category").value,
+        path: document.getElementById("folder-path").value,
+        name: document.getElementById("folder-old-name").value,
+      }),
+    }));
+  } catch (e) { showError("out-folders", e); }
+}
+
+// --- upload progress bar helpers ---
+const MULTIPART_THRESHOLD = 6 * 1024 * 1024;
+const MULTIPART_CONCURRENCY = 6;
+const upWrap = document.getElementById("upload-progress-wrap");
+const upFill = document.getElementById("upload-progress-fill");
+const upLabel = document.getElementById("upload-progress-label");
+function upStart(label) { upWrap.classList.add("active"); upFill.className = ""; upFill.style.width = "0%"; upLabel.textContent = label; }
+function upSet(fraction) {
+  if (fraction == null) { upFill.classList.add("indeterminate"); }
+  else { upFill.classList.remove("indeterminate"); upFill.style.width = Math.round(fraction * 100) + "%"; }
+}
+function upDone(ok, label) { upFill.classList.remove("indeterminate"); upFill.style.width = "100%"; upFill.classList.add(ok ? "done" : "failed"); upLabel.textContent = label; }
+
+function pickFile() {
+  const f = document.getElementById("upload-file").files[0];
+  if (!f) throw new Error("pick a file first");
+  return f;
+}
+function uploadArgs() {
+  return {
+    category: document.getElementById("upload-category").value,
+    path: document.getElementById("upload-path").value,
+  };
+}
+function afterUpload(key) {
+  document.getElementById("exists-key").value = key;
+  document.getElementById("rename-key").value = key;
+  document.getElementById("delete-key").value = key;
+  document.getElementById("link-key").value = key;
+}
+
+// Auto: chunked parallel multipart for large files, single PUT for small.
+async function uploadFileAuto() {
+  let file;
+  try { file = pickFile(); } catch (e) { showError("out-files", e); return; }
+  const t0 = performance.now();
+  try {
+    const key = file.size > MULTIPART_THRESHOLD
+      ? await uploadMultipart(file)
+      : await uploadSinglePut(file);
+    const secs = ((performance.now() - t0) / 1000).toFixed(1);
+    const check = await api("/api/files/exists?key=" + encodeURIComponent(key));
+    show("out-files", {uploaded: key, seconds: Number(secs), mb: (file.size/1048576).toFixed(1), verified: check});
+    afterUpload(key);
+  } catch (e) { upDone(false, e.message); showError("out-files", e); }
+}
+async function uploadFileSingle() {
+  let file;
+  try { file = pickFile(); } catch (e) { showError("out-files", e); return; }
+  try { const key = await uploadSinglePut(file); afterUpload(key); show("out-files", {uploaded: key, mode: "single PUT"}); }
+  catch (e) { upDone(false, e.message); showError("out-files", e); }
+}
+
+// One presigned PUT for the whole file.
+async function uploadSinglePut(file) {
+  upStart("Requesting presigned URL...");
+  const presign = await api("/api/upload/presign", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({...uploadArgs(), filename: file.name}),
+  });
+  upStart("Uploading (single PUT) " + file.name);
+  await new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", presign.putUrl);
+    xhr.setRequestHeader("Content-Type", presign.contentType);
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable) upSet(e.loaded < e.total ? e.loaded / e.total : null); };
+    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300) ? resolve() : reject(new Error("S3 PUT HTTP " + xhr.status));
+    xhr.onerror = () => reject(new Error("network error"));
+    xhr.send(file);
+  });
+  upDone(true, "Uploaded " + file.name);
+  return presign.key;
+}
+
+// Chunked: create -> PUT parts in parallel -> complete. The real speed win.
+async function uploadMultipart(file) {
+  upStart("Creating multipart upload...");
+  const c = await api("/api/upload/multipart/create", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({...uploadArgs(), filename: file.name, size: file.size}),
+  });
+  const {key, uploadId, partSize, partUrls} = c;
+  const partLoaded = new Array(partUrls.length).fill(0);
+  const render = () => upSet(partLoaded.reduce((a, b) => a + b, 0) / file.size);
+  upStart(`Uploading ${partUrls.length} parts, ${MULTIPART_CONCURRENCY} at a time...`);
+
+  const putPart = (i) => new Promise((resolve, reject) => {
+    const blob = file.slice(i * partSize, Math.min((i + 1) * partSize, file.size));
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", partUrls[i]);
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable) { partLoaded[i] = e.loaded; render(); } };
+    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300)
+      ? (partLoaded[i] = blob.size, render(), resolve())
+      : reject(new Error("part " + (i + 1) + " HTTP " + xhr.status));
+    xhr.onerror = () => reject(new Error("network error on part " + (i + 1)));
+    xhr.send(blob);
+  });
+
+  let next = 0;
+  const worker = async () => { while (next < partUrls.length) await putPart(next++); };
+  try {
+    await Promise.all(Array.from({length: Math.min(MULTIPART_CONCURRENCY, partUrls.length)}, worker));
+  } catch (e) {
+    api("/api/upload/multipart/abort", {method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({key, uploadId})}).catch(() => {});
+    throw e;
+  }
+  upSet(null); upLabel.textContent = "Finalizing...";
+  await api("/api/upload/multipart/complete", {method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({key, uploadId})});
+  upDone(true, "Uploaded " + file.name + " (" + partUrls.length + " parts)");
+  return key;
+}
+
+// Kept for contrast - buffers the whole file in the server; fails on large ones.
+async function uploadFileLegacy() {
+  let file;
+  try { file = pickFile(); } catch (e) { showError("out-files", e); return; }
+  const form = new FormData();
+  form.append("category", document.getElementById("upload-category").value);
+  form.append("path", document.getElementById("upload-path").value);
+  form.append("file", file);
+  upStart("Uploading via server (buffered)...");
+  try {
+    const r = await api("/api/upload", {method: "POST", body: form});
+    upDone(true, "Uploaded via server");
+    afterUpload(r.key);
+    show("out-files", r);
+  } catch (e) { upDone(false, e.message); showError("out-files", e); }
+}
+
+async function checkExists() {
+  const key = encodeURIComponent(document.getElementById("exists-key").value);
+  try { show("out-files2", await api("/api/files/exists?key=" + key)); } catch (e) { showError("out-files2", e); }
+}
+
+async function renameFile() {
+  try {
+    show("out-files2", await api("/api/files/rename", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        key: document.getElementById("rename-key").value,
+        new_name: document.getElementById("rename-new-name").value,
+      }),
+    }));
+  } catch (e) { showError("out-files2", e); }
+}
+
+async function deleteFile() {
+  try {
+    show("out-files2", await api("/api/files", {
+      method: "DELETE",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({key: document.getElementById("delete-key").value}),
+    }));
+  } catch (e) { showError("out-files2", e); }
+}
+
+function buildLinks() {
+  const key = document.getElementById("link-key").value;
+  const filename = key.split("/").pop() || "file";
+  const downloadUrl = baseUrl() + "/api/download?key=" + encodeURIComponent(key);
+  const streamUrl = baseUrl() + "/api/stream/" + encodeURIComponent(filename) + "?key=" + encodeURIComponent(key);
+  document.getElementById("link-output").innerHTML =
+    "<div class='row'>Download: <a class='raw-link' href='" + downloadUrl + "'>" + downloadUrl + "</a></div>" +
+    "<div class='row'>Stream (redirects to CloudFront): <a class='raw-link' href='" + streamUrl + "'>" + streamUrl + "</a></div>";
+}
+
+async function getContent() {
+  const key = encodeURIComponent(document.getElementById("content-key").value);
+  try {
+    const data = await api("/api/files/content?key=" + key);
+    document.getElementById("content-text").value = data.content;
+    show("out-content", {ok: true, length: data.content.length});
+  } catch (e) { showError("out-content", e); }
+}
+
+async function putContent() {
+  try {
+    show("out-content", await api("/api/files/content", {
+      method: "PUT",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        key: document.getElementById("content-key").value,
+        content: document.getElementById("content-text").value,
+      }),
+    }));
+  } catch (e) { showError("out-content", e); }
+}
+</script>
+</body>
+</html>
