@@ -23,6 +23,17 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 const app = express();
 app.use(express.json());
+
+// Personal single-user API, no cookie/session auth to leak - safe to allow
+// any origin so standalone tools/test pages can call it directly.
+app.use((req, res, next) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") return res.sendStatus(204);
+  next();
+});
+
 app.use(express.static(path.join(__dirname, "..", "public")));
 
 const client = new CloudGateClient();
@@ -200,6 +211,21 @@ app.post(
     if (!req.file) return res.status(400).json({ error: "missing file" });
     const result = await client.uploadFile(req.file.buffer, category, subPath, req.file.originalname);
     res.json(fileJson(result));
+  })
+);
+
+// Preferred upload path: get a presigned URL, then PUT the file straight to
+// S3 from the browser - the actual bytes never pass through this server, so
+// it isn't bounded by the serverless function's execution time or memory.
+app.post(
+  "/api/upload/presign",
+  h(async (req, res) => {
+    const { category, path: subPath = "", filename } = req.body;
+    if (!isValidCategoryId(category) || !filename) {
+      return res.status(400).json({ error: "invalid category or filename" });
+    }
+    const result = await client.presignUpload(category, subPath, filename);
+    res.json(result);
   })
 );
 

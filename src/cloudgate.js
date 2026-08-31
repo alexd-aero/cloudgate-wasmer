@@ -15,6 +15,7 @@ import {
   DeleteObjectsCommand,
   CopyObjectCommand,
 } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import {
   CognitoIdentityClient,
   GetIdCommand,
@@ -462,6 +463,21 @@ export class CloudGateClient {
     );
     const head = await s3.send(new HeadObjectCommand({ Bucket: S3_BUCKET, Key: key }));
     return toFileObject(key, head.ContentLength, head.LastModified, category);
+  }
+
+  // Direct-to-S3 upload: the browser PUTs the file straight to S3 using a
+  // short-lived presigned URL, never passing through this server at all.
+  // Necessary for anything but small files on serverless - a function that
+  // buffers the whole upload in memory first hits execution time/memory
+  // limits on larger files (a lossless audio file was enough to trigger it).
+  async presignUpload(category, subPath, remoteName) {
+    if (!isValidCategoryId(category)) throw new Error("invalid category");
+    const key = `${this._prefix(category, subPath)}${remoteName}`;
+    const contentType = guessContentType(remoteName);
+    const s3 = await this._s3Client();
+    const command = new PutObjectCommand({ Bucket: S3_BUCKET, Key: key, ContentType: contentType });
+    const url = await getSignedUrl(s3, command, { expiresIn: 300 });
+    return { url, key, contentType };
   }
 
   async renameFile(key, newName) {
