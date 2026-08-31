@@ -838,21 +838,43 @@ async function uploadWithProgress(file, category, subPath) {
     finishProgress(false, e.message || "Upload failed");
     throw e;
   }
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("PUT", presign.url);
+    let settled = false;
+    let fallbackTimer = null;
+
+    const settle = (ok, message) => {
+      if (settled) return;
+      settled = true;
+      if (fallbackTimer) clearTimeout(fallbackTimer);
+      finishProgress(ok, message);
+      resolve(ok ? {key: presign.key} : null);
+    };
+
+    xhr.open("PUT", presign.putUrl);
     xhr.setRequestHeader("Content-Type", presign.contentType);
-    xhr.upload.onprogress = (e) => { if (e.lengthComputable) updateProgress(e.loaded / e.total); };
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        finishProgress(true, "Uploaded " + file.name);
-        resolve({key: presign.key});
-      } else {
-        finishProgress(false, "Upload failed");
-        reject(new Error("Upload failed"));
+    xhr.upload.onprogress = (e) => {
+      if (!e.lengthComputable) return;
+      updateProgress(e.loaded / e.total);
+      // All bytes handed off to the network layer, but some browsers don't
+      // reliably fire xhr.onload for very large uploads even though the
+      // transfer actually succeeded - don't just hang forever waiting for it.
+      if (e.loaded === e.total && !fallbackTimer) {
+        fallbackTimer = setTimeout(async () => {
+          if (settled) return;
+          try {
+            const head = await fetch(presign.publicUrl, {method: "HEAD", cache: "no-store"});
+            if (head.ok) { settle(true, "Uploaded " + file.name); return; }
+          } catch (e) { /* fall through to failure below */ }
+          settle(false, "Upload timed out waiting for confirmation - check the file list, it may have still gone through");
+        }, 8000);
       }
     };
-    xhr.onerror = () => { finishProgress(false, "Network error"); reject(new Error("Network error")); };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) settle(true, "Uploaded " + file.name);
+      else settle(false, "Upload failed");
+    };
+    xhr.onerror = () => settle(false, "Network error");
     xhr.send(file);
   });
 }
@@ -1306,13 +1328,8 @@ document.getElementById("upload-btn").onclick = () => document.getElementById("f
 document.getElementById("file-input").onchange = async (e) => {
   const file = e.target.files[0];
   if (!file) return;
-  try {
-    await uploadWithProgress(file, currentCategory, pathString());
-    loadBrowse();
-    loadQuota();
-  } catch (err) {
-    // progress toast already shows the error
-  }
+  const result = await uploadWithProgress(file, currentCategory, pathString());
+  if (result) { loadBrowse(); loadQuota(); } // failure already shown via the progress toast
   e.target.value = "";
 };
 

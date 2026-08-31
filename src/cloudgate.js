@@ -476,8 +476,13 @@ export class CloudGateClient {
     const contentType = guessContentType(remoteName);
     const s3 = await this._s3Client();
     const command = new PutObjectCommand({ Bucket: S3_BUCKET, Key: key, ContentType: contentType });
-    const url = await getSignedUrl(s3, command, { expiresIn: 300 });
-    return { url, key, contentType };
+    const putUrl = await getSignedUrl(s3, command, { expiresIn: 300 });
+    // publicUrl is for the client to verify completion afterward if its PUT
+    // response never arrives (some browsers don't reliably fire the load
+    // event for very large uploads even though the transfer succeeded) - a
+    // presigned URL is signed for one specific method, so the PUT url can't
+    // be reused for that HEAD check.
+    return { putUrl, key, contentType, publicUrl: publicUrlOf(key) };
   }
 
   async renameFile(key, newName) {
