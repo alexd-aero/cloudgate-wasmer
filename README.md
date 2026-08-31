@@ -30,6 +30,9 @@ Set these in the app's environment variables (Settings > Environment
 Variables), not committed anywhere in this repo:
 - `CLOUDGATE_EMAIL`
 - `CLOUDGATE_REFRESH_TOKEN`
+- `REAUTH_ACCESS_TOKEN` - a random secret string (`openssl rand -base64 32`
+  or similar). Gates `/login` - see below for why this exists and isn't
+  optional for a public deployment.
 
 **I couldn't test an actual deploy** (no Wasmer CLI/account available where
 this was built) - if the auto-detected build still misbehaves, check
@@ -42,8 +45,23 @@ one is more likely to get flagged/revoked. Once this is deployed and has a
 live URL, set up something (a cron job, an uptime monitor, a scheduled
 GitHub Action in the other repo) to hit `GET /api/profile` on it
 periodically - that forces a token-refresh cycle. If the token does ever
-die anyway, `/login` on the deployed app does a fresh Google sign-in and
-reconnects in about 10 seconds.
+die anyway, open `https://your-app.wasmer.app/login?token=YOUR_REAUTH_ACCESS_TOKEN`
+for a fresh Google sign-in that reconnects in about 10 seconds - **save that
+full URL somewhere private** (password manager, not a chat log or anywhere
+public), it's the only way to reach the page.
+
+### Why `/login` requires a token
+
+A public, unauthenticated "Sign in with Google" page - even one whose
+backend correctly rejects any account but the owner's - is
+indistinguishable from an OAuth-phishing page to hosting providers'
+automated abuse scanners (and to any stranger who stumbles on the link):
+it invites a real Google consent screen before the app ever gets a chance
+to check whose account it is. Gating the page behind
+`REAUTH_ACCESS_TOKEN` means it 404s for everyone except someone who
+already has the secret link. This app got disabled by Wasmer's Trust &
+Safety team once already for exactly this pattern before the gate was
+added - don't remove it without a different fix in place.
 
 ### Persistent storage caveat
 

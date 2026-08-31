@@ -781,8 +781,12 @@ async function jsonFetch(url, opts) {
   const res = await fetch(url, opts);
   const body = await res.json().catch(() => ({}));
   if (res.status === 401 && body.error === "reauth_required") {
-    window.location.href = "/login";
-    throw new Error("Sign-in required - redirecting...");
+    // /login requires a secret token in its URL (so it isn't a public,
+    // unauthenticated "Sign in with Google" page - that shape gets treated
+    // as OAuth phishing by hosting providers' abuse scanners). The token
+    // can't safely live in this client-side JS, so this can't auto-redirect
+    // - surface it and let the user open their saved /login?token=... link.
+    throw new Error("Session expired - open your saved /login link to reconnect.");
   }
   if (!res.ok) throw new Error(body.error || res.statusText);
   return body;

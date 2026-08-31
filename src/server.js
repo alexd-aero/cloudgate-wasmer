@@ -48,14 +48,29 @@ function fileJson(f) {
 const h = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 
 app.get("/", (req, res) => res.sendFile(path.join(__dirname, "..", "public", "index.html")));
-app.get("/login", (req, res) => res.sendFile(path.join(__dirname, "..", "public", "login.html")));
 
-app.get("/api/login-config", (req, res) => {
+// /login is gated behind REAUTH_ACCESS_TOKEN: a public "Sign in with Google"
+// page with no gate is indistinguishable from an OAuth-phishing page to
+// automated abuse scanners (and to any stranger who finds the link) - it
+// invites anyone to grant a Google consent screen before this app ever gets
+// a chance to check whose account it is. Requiring a secret token in the
+// URL means only someone who already has it can reach the page at all.
+function requireReauthToken(req, res, next) {
+  const required = process.env.REAUTH_ACCESS_TOKEN;
+  if (!required) return res.status(404).send("Not found");
+  if (req.query.token !== required) return res.status(404).send("Not found");
+  next();
+}
+
+app.get("/login", requireReauthToken, (req, res) => res.sendFile(path.join(__dirname, "..", "public", "login.html")));
+
+app.get("/api/login-config", requireReauthToken, (req, res) => {
   res.json({ apiKey: FIREBASE_API_KEY, projectId: FIREBASE_PROJECT_ID });
 });
 
 app.post(
   "/api/reauth",
+  requireReauthToken,
   h(async (req, res) => {
     const { email, refresh_token: refreshToken } = req.body || {};
     if (!refreshToken || !email) return res.status(400).json({ error: "missing refresh_token or email" });

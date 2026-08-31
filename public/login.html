@@ -58,7 +58,13 @@
 </div>
 <script>
 (async function () {
-  const cfg = await fetch("/api/login-config").then(r => r.json());
+  // This page is only reachable via a link containing ?token=... (the
+  // server 404s /login without it) - carry that same token through to the
+  // gated API calls below.
+  const token = new URLSearchParams(window.location.search).get("token") || "";
+  const tokenQS = "?token=" + encodeURIComponent(token);
+
+  const cfg = await fetch("/api/login-config" + tokenQS).then(r => r.json());
   firebase.initializeApp({
     apiKey: cfg.apiKey,
     authDomain: cfg.projectId + ".firebaseapp.com",
@@ -77,7 +83,7 @@
       const result = await firebase.auth().signInWithPopup(provider);
       const user = result.user;
       status.textContent = "Reconnecting...";
-      const res = await fetch("/api/reauth", {
+      const res = await fetch("/api/reauth" + tokenQS, {
         method: "POST",
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({email: user.email, refresh_token: user.refreshToken}),
