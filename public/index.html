@@ -801,6 +801,9 @@ function showProgress(label) {
   progressText.textContent = label;
   progressPct.textContent = "0%";
 }
+function showProgressLabel(label) {
+  progressText.textContent = label;
+}
 function updateProgress(fraction) {
   if (fraction === null || fraction === undefined) {
     progressFill.classList.add("indeterminate");
@@ -841,40 +844,55 @@ async function uploadWithProgress(file, category, subPath) {
   return new Promise((resolve) => {
     const xhr = new XMLHttpRequest();
     let settled = false;
-    let fallbackTimer = null;
+    let pollTimer = null;
 
     const settle = (ok, message) => {
       if (settled) return;
       settled = true;
-      if (fallbackTimer) clearTimeout(fallbackTimer);
+      if (pollTimer) clearInterval(pollTimer);
       finishProgress(ok, message);
       resolve(ok ? {key: presign.key} : null);
     };
 
+    // XHR reports 100% as soon as the bytes are handed to the OS socket
+    // buffer, which can be almost instantly - the actual transfer to S3 may
+    // still have a long way to go after that. So 100% means "handed off",
+    // not "done": switch to an indeterminate "Finalizing" state and keep
+    // waiting for the real completion signal rather than claiming success
+    // (or, worse, declaring a still-running upload failed).
     xhr.open("PUT", presign.putUrl);
     xhr.setRequestHeader("Content-Type", presign.contentType);
     xhr.upload.onprogress = (e) => {
-      if (!e.lengthComputable) return;
-      updateProgress(e.loaded / e.total);
-      // All bytes handed off to the network layer, but some browsers don't
-      // reliably fire xhr.onload for very large uploads even though the
-      // transfer actually succeeded - don't just hang forever waiting for it.
-      if (e.loaded === e.total && !fallbackTimer) {
-        fallbackTimer = setTimeout(async () => {
-          if (settled) return;
-          try {
-            const head = await fetch(presign.publicUrl, {method: "HEAD", cache: "no-store"});
-            if (head.ok) { settle(true, "Uploaded " + file.name); return; }
-          } catch (e) { /* fall through to failure below */ }
-          settle(false, "Upload timed out waiting for confirmation - check the file list, it may have still gone through");
-        }, 8000);
+      if (settled || !e.lengthComputable) return;
+      if (e.loaded < e.total) {
+        updateProgress(e.loaded / e.total);
+        return;
       }
+      showProgressLabel("Finalizing " + file.name + "...");
+      updateProgress(null); // indeterminate - transfer is still in flight
+      if (pollTimer) return;
+      // Safety net in case the completion event never arrives: poll our own
+      // API (same-origin, authoritative) for the object actually existing.
+      // Generous horizon - a large file on a slow uplink legitimately takes
+      // minutes, and failing early is exactly the bug this replaces.
+      let waited = 0;
+      pollTimer = setInterval(async () => {
+        if (settled) return;
+        waited += 10;
+        try {
+          const r = await jsonFetch("/api/files/exists?key=" + encodeURIComponent(presign.key));
+          if (r.exists && r.size === file.size) { settle(true, "Uploaded " + file.name); return; }
+        } catch (err) { /* transient - keep waiting */ }
+        if (waited >= 900) {
+          settle(false, "Upload didn't confirm after 15 min - check the file list before retrying");
+        }
+      }, 10000);
     };
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) settle(true, "Uploaded " + file.name);
-      else settle(false, "Upload failed");
+      else settle(false, "Upload failed (HTTP " + xhr.status + ")");
     };
-    xhr.onerror = () => settle(false, "Network error");
+    xhr.onerror = () => settle(false, "Network error during upload");
     xhr.send(file);
   });
 }

@@ -229,6 +229,16 @@ app.post(
   })
 );
 
+app.get(
+  "/api/files/exists",
+  h(async (req, res) => {
+    const key = req.query.key;
+    if (!key) return res.status(400).json({ error: "missing key" });
+    const size = await client.objectExists(key);
+    res.json({ exists: size !== null, size });
+  })
+);
+
 app.post(
   "/api/files/rename",
   h(async (req, res) => {

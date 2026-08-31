@@ -485,6 +485,17 @@ export class CloudGateClient {
     return { putUrl, key, contentType, publicUrl: publicUrlOf(key) };
   }
 
+  // Returns the object's size, or null if it isn't there (yet).
+  async objectExists(key) {
+    const s3 = await this._s3Client();
+    try {
+      const head = await s3.send(new HeadObjectCommand({ Bucket: S3_BUCKET, Key: key }));
+      return head.ContentLength;
+    } catch {
+      return null;
+    }
+  }
+
   async renameFile(key, newName) {
     const newKey = key.slice(0, key.lastIndexOf("/") + 1) + newName;
     const s3 = await this._s3Client();
