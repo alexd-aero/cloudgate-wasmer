@@ -52,22 +52,33 @@
     font-size: 12px; color: #c8c8d0; border-radius: 0 6px 6px 0; margin-top: 10px;
   }
   .note b { color: #f2f2f5; }
-  .upload-progress-wrap { display: none; margin: 12px 0 4px; }
+
+  /* Classic 2015 Bootstrap-3-style progress bar */
+  .upload-progress-wrap { display: none; margin: 14px 0 4px; }
   .upload-progress-wrap.active { display: block; }
   .upload-progress-bar {
-    height: 8px; background: #0a0a0e; border: 1px solid #2a2a33;
-    border-radius: 6px; overflow: hidden;
+    height: 20px; background-color: #ededed; border-radius: 4px;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.1); overflow: hidden;
   }
   #upload-progress-fill {
-    height: 100%; width: 0%; border-radius: 6px;
-    background: linear-gradient(90deg, #7c6df2, #4285F4); transition: width 0.15s ease;
+    height: 100%; width: 0%;
+    background-color: #337ab7; /* Bootstrap primary blue */
+    color: #fff; font-size: 12px; line-height: 20px; text-align: center;
+    white-space: nowrap; overflow: hidden;
+    transition: width 0.4s ease;
+    box-shadow: inset 0 -1px 0 rgba(0,0,0,0.15);
+    /* the signature diagonal candy-stripes */
+    background-image: linear-gradient(45deg,
+      rgba(255,255,255,0.15) 25%, transparent 25%,
+      transparent 50%, rgba(255,255,255,0.15) 50%,
+      rgba(255,255,255,0.15) 75%, transparent 75%, transparent);
+    background-size: 40px 40px;
+    animation: progress-stripes 1s linear infinite;
   }
-  #upload-progress-fill.indeterminate {
-    width: 40% !important; animation: indet 1s infinite ease-in-out;
-  }
-  #upload-progress-fill.done { background: linear-gradient(90deg, #34A853, #24C1E0); }
-  #upload-progress-fill.failed { background: #f2695f; }
-  @keyframes indet { 0% { margin-left: -40%; } 100% { margin-left: 100%; } }
+  #upload-progress-fill.done { background-color: #5cb85c; }   /* success green */
+  #upload-progress-fill.failed { background-color: #d9534f; } /* danger red */
+  #upload-progress-fill.done, #upload-progress-fill.failed { animation: none; }
+  @keyframes progress-stripes { from { background-position: 40px 0; } to { background-position: 0 0; } }
   #upload-progress-label { font-size: 12px; color: #9a9aa5; margin-top: 6px; }
 </style>
 </head>
@@ -339,12 +350,21 @@ const MULTIPART_CONCURRENCY = 6;
 const upWrap = document.getElementById("upload-progress-wrap");
 const upFill = document.getElementById("upload-progress-fill");
 const upLabel = document.getElementById("upload-progress-label");
-function upStart(label) { upWrap.classList.add("active"); upFill.className = ""; upFill.style.width = "0%"; upLabel.textContent = label; }
+function upStart(label) { upWrap.classList.add("active"); upFill.className = ""; upFill.style.width = "0%"; upFill.textContent = ""; upLabel.textContent = label; }
 function upSet(fraction) {
-  if (fraction == null) { upFill.classList.add("indeterminate"); }
-  else { upFill.classList.remove("indeterminate"); upFill.style.width = Math.round(fraction * 100) + "%"; }
+  if (fraction == null) { upFill.style.width = "100%"; upFill.textContent = ""; } // indeterminate: full striped bar
+  else {
+    const pct = Math.round(fraction * 100);
+    upFill.style.width = pct + "%";
+    upFill.textContent = pct >= 8 ? pct + "%" : ""; // hide the label until it fits inside
+  }
 }
-function upDone(ok, label) { upFill.classList.remove("indeterminate"); upFill.style.width = "100%"; upFill.classList.add(ok ? "done" : "failed"); upLabel.textContent = label; }
+function upDone(ok, label) {
+  upFill.style.width = "100%";
+  upFill.classList.add(ok ? "done" : "failed");
+  upFill.textContent = ok ? "100%" : "Failed";
+  upLabel.textContent = label;
+}
 
 function pickFile() {
   const f = document.getElementById("upload-file").files[0];
