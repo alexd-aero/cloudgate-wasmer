@@ -612,15 +612,21 @@ function confirmModal(message) {
 // ---------- Raw URL modal ----------
 
 const linkModalOverlay = document.getElementById("link-modal-overlay");
+let rawUrlModalFile = null;
 function showRawUrlModal(f) {
+  rawUrlModalFile = f;
   const urlInput = document.getElementById("link-url-input");
   const streamInput = document.getElementById("link-stream-input");
   urlInput.value = f.url;
   streamInput.value = window.location.origin + f.stream_path;
-  // Clicking the URL text itself opens it in a new tab, same as the "Open"
-  // button - a plain readonly <input> doesn't navigate on click otherwise.
-  urlInput.onclick = () => window.open(urlInput.value, "_blank");
-  streamInput.onclick = () => window.open(streamInput.value, "_blank");
+  // "Open" always opens the direct CloudFront URL (f.url), even from the
+  // "app link" field/button - window.open() to a URL that then 302-redirects
+  // cross-origin (like /api/stream) makes Chrome fall back to downloading
+  // instead of rendering the popup. A manually pasted/typed URL doesn't hit
+  // that path, so /api/stream is still fine to copy and share/paste
+  // elsewhere - just not to open via a script-triggered window.open() here.
+  urlInput.onclick = () => window.open(f.url, "_blank");
+  streamInput.onclick = () => window.open(f.url, "_blank");
   linkModalOverlay.classList.add("active");
 }
 document.getElementById("link-close-btn").onclick = () => linkModalOverlay.classList.remove("active");
@@ -636,9 +642,9 @@ async function copyInputValue(inputId) {
   }
   toast("Copied to clipboard");
 }
-document.getElementById("link-open-btn").onclick = () => window.open(document.getElementById("link-url-input").value, "_blank");
+document.getElementById("link-open-btn").onclick = () => window.open(rawUrlModalFile?.url, "_blank");
 document.getElementById("link-copy-btn").onclick = () => copyInputValue("link-url-input");
-document.getElementById("link-stream-open-btn").onclick = () => window.open(document.getElementById("link-stream-input").value, "_blank");
+document.getElementById("link-stream-open-btn").onclick = () => window.open(rawUrlModalFile?.url, "_blank");
 document.getElementById("link-stream-copy-btn").onclick = () => copyInputValue("link-stream-input");
 
 // ---------- Preview (streaming playback via CloudFront directly) ----------
