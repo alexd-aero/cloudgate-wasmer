@@ -229,6 +229,42 @@ app.post(
   })
 );
 
+// Chunked/parallel upload (multipart). create -> browser PUTs parts
+// concurrently -> complete.
+const MULTIPART_PART_SIZE = 8 * 1024 * 1024; // 8 MB (S3 minimum part size is 5 MB)
+
+app.post(
+  "/api/upload/multipart/create",
+  h(async (req, res) => {
+    const { category, path: subPath = "", filename, size } = req.body;
+    if (!isValidCategoryId(category) || !filename || !Number.isFinite(size)) {
+      return res.status(400).json({ error: "invalid category, filename or size" });
+    }
+    const result = await client.createMultipartUpload(category, subPath, filename, size, MULTIPART_PART_SIZE);
+    res.json(result);
+  })
+);
+
+app.post(
+  "/api/upload/multipart/complete",
+  h(async (req, res) => {
+    const { key, uploadId } = req.body;
+    if (!key || !uploadId) return res.status(400).json({ error: "missing key or uploadId" });
+    const result = await client.completeMultipartUpload(key, uploadId);
+    res.json(fileJson(result));
+  })
+);
+
+app.post(
+  "/api/upload/multipart/abort",
+  h(async (req, res) => {
+    const { key, uploadId } = req.body;
+    if (!key || !uploadId) return res.status(400).json({ error: "missing key or uploadId" });
+    await client.abortMultipartUpload(key, uploadId);
+    res.json({ ok: true });
+  })
+);
+
 app.get(
   "/api/files/exists",
   h(async (req, res) => {

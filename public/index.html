@@ -824,77 +824,110 @@ function finishProgress(success, message) {
   setTimeout(() => progressToast.classList.remove("active"), success ? 1100 : 2600);
 }
 
-// Gets a presigned S3 URL from the server, then PUTs the file straight to
-// S3 from the browser - the bytes never pass through our own server, so
-// large files (audio, video) aren't bounded by a serverless function's
-// execution time/memory limits.
+// Files at/under this go via a single presigned PUT (multipart isn't worth
+// its overhead, and S3 requires parts >= 5 MB anyway). Bigger files use a
+// parallel chunked (multipart) upload.
+const MULTIPART_THRESHOLD = 8 * 1024 * 1024;
+const MULTIPART_CONCURRENCY = 4; // parts uploading at once - the actual speedup
+
 async function uploadWithProgress(file, category, subPath) {
-  showProgress("Uploading " + file.name);
-  let presign;
   try {
-    presign = await jsonFetch("/api/upload/presign", {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({category, path: subPath, filename: file.name}),
-    });
+    if (file.size <= MULTIPART_THRESHOLD) {
+      return await uploadSinglePart(file, category, subPath);
+    }
+    return await uploadMultipart(file, category, subPath);
   } catch (e) {
     finishProgress(false, e.message || "Upload failed");
-    throw e;
+    return null;
   }
-  return new Promise((resolve) => {
+}
+
+// One presigned PUT for the whole file. XHR fires progress up to 100% when
+// bytes hit the OS socket buffer (not when S3 has them), so on reaching 100%
+// we show an indeterminate "Finalizing" and confirm via onload.
+function uploadSinglePart(file, category, subPath) {
+  showProgress("Uploading " + file.name);
+  return jsonFetch("/api/upload/presign", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({category, path: subPath, filename: file.name}),
+  }).then((presign) => new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    let settled = false;
-    let pollTimer = null;
-
-    const settle = (ok, message) => {
-      if (settled) return;
-      settled = true;
-      if (pollTimer) clearInterval(pollTimer);
-      finishProgress(ok, message);
-      resolve(ok ? {key: presign.key} : null);
-    };
-
-    // XHR reports 100% as soon as the bytes are handed to the OS socket
-    // buffer, which can be almost instantly - the actual transfer to S3 may
-    // still have a long way to go after that. So 100% means "handed off",
-    // not "done": switch to an indeterminate "Finalizing" state and keep
-    // waiting for the real completion signal rather than claiming success
-    // (or, worse, declaring a still-running upload failed).
     xhr.open("PUT", presign.putUrl);
     xhr.setRequestHeader("Content-Type", presign.contentType);
     xhr.upload.onprogress = (e) => {
-      if (settled || !e.lengthComputable) return;
-      if (e.loaded < e.total) {
-        updateProgress(e.loaded / e.total);
-        return;
-      }
-      showProgressLabel("Finalizing " + file.name + "...");
-      updateProgress(null); // indeterminate - transfer is still in flight
-      if (pollTimer) return;
-      // Safety net in case the completion event never arrives: poll our own
-      // API (same-origin, authoritative) for the object actually existing.
-      // Generous horizon - a large file on a slow uplink legitimately takes
-      // minutes, and failing early is exactly the bug this replaces.
-      let waited = 0;
-      pollTimer = setInterval(async () => {
-        if (settled) return;
-        waited += 10;
-        try {
-          const r = await jsonFetch("/api/files/exists?key=" + encodeURIComponent(presign.key));
-          if (r.exists && r.size === file.size) { settle(true, "Uploaded " + file.name); return; }
-        } catch (err) { /* transient - keep waiting */ }
-        if (waited >= 900) {
-          settle(false, "Upload didn't confirm after 15 min - check the file list before retrying");
-        }
-      }, 10000);
+      if (!e.lengthComputable) return;
+      if (e.loaded < e.total) updateProgress(e.loaded / e.total);
+      else { showProgressLabel("Finalizing " + file.name + "..."); updateProgress(null); }
     };
     xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) settle(true, "Uploaded " + file.name);
-      else settle(false, "Upload failed (HTTP " + xhr.status + ")");
+      if (xhr.status >= 200 && xhr.status < 300) { finishProgress(true, "Uploaded " + file.name); resolve({key: presign.key}); }
+      else reject(new Error("Upload failed (HTTP " + xhr.status + ")"));
     };
-    xhr.onerror = () => settle(false, "Network error during upload");
+    xhr.onerror = () => reject(new Error("Network error during upload"));
     xhr.send(file);
+  }));
+}
+
+// Parallel chunked upload: split into parts, PUT several at once, then the
+// server finalizes. Aggregate progress is summed across all parts so the bar
+// is honest, and it reflects real network throughput (not a socket buffer).
+async function uploadMultipart(file, category, subPath) {
+  showProgress("Uploading " + file.name);
+  updateProgress(0);
+  const created = await jsonFetch("/api/upload/multipart/create", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({category, path: subPath, filename: file.name, size: file.size}),
   });
+
+  const {key, uploadId, partSize, partUrls} = created;
+  const partProgress = new Array(partUrls.length).fill(0);
+  const renderProgress = () => {
+    const loaded = partProgress.reduce((a, b) => a + b, 0);
+    updateProgress(loaded / file.size);
+  };
+
+  const putPart = (index) => new Promise((resolve, reject) => {
+    const start = index * partSize;
+    const blob = file.slice(start, Math.min(start + partSize, file.size));
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", partUrls[index]);
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable) { partProgress[index] = e.loaded; renderProgress(); } };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) { partProgress[index] = blob.size; renderProgress(); resolve(); }
+      else reject(new Error("Part " + (index + 1) + " failed (HTTP " + xhr.status + ")"));
+    };
+    xhr.onerror = () => reject(new Error("Network error on part " + (index + 1)));
+    xhr.send(blob);
+  });
+
+  // Worker pool: at most MULTIPART_CONCURRENCY parts in flight at a time.
+  let next = 0;
+  const worker = async () => {
+    while (next < partUrls.length) {
+      const i = next++;
+      await putPart(i);
+    }
+  };
+  try {
+    await Promise.all(Array.from({length: Math.min(MULTIPART_CONCURRENCY, partUrls.length)}, worker));
+  } catch (e) {
+    jsonFetch("/api/upload/multipart/abort", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({key, uploadId}),
+    }).catch(() => {});
+    throw e;
+  }
+
+  showProgressLabel("Finalizing " + file.name + "...");
+  updateProgress(null);
+  await jsonFetch("/api/upload/multipart/complete", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({key, uploadId}),
+  });
+  finishProgress(true, "Uploaded " + file.name);
+  return {key};
 }
 
 async function downloadWithProgress(url, filename) {

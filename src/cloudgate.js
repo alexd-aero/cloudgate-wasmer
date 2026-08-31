@@ -14,6 +14,11 @@ import {
   DeleteObjectCommand,
   DeleteObjectsCommand,
   CopyObjectCommand,
+  CreateMultipartUploadCommand,
+  UploadPartCommand,
+  CompleteMultipartUploadCommand,
+  AbortMultipartUploadCommand,
+  ListPartsCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import {
@@ -141,6 +146,13 @@ export function aceMode(filename) {
   if (name === "dockerfile") return "dockerfile";
   if (["bashrc", "zshrc", "env"].includes(name)) return "sh";
   return "text";
+}
+
+function formatBytes(n) {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(2)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(2)} MB`;
+  return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }
 
 function filenameOf(key) {
@@ -485,6 +497,64 @@ export class CloudGateClient {
     return { putUrl, key, contentType, publicUrl: publicUrlOf(key) };
   }
 
+  // ---- multipart (chunked, parallel) upload ----
+  // Splits a large file into parts the browser PUTs to S3 concurrently, so
+  // several chunks are in flight at once instead of one serial stream -
+  // several times faster on a connection that can't saturate a single
+  // stream. The server only presigns the part URLs and finalizes; the bytes
+  // still never pass through it.
+  async createMultipartUpload(category, subPath, remoteName, size, partSize) {
+    if (!isValidCategoryId(category)) throw new Error("invalid category");
+    const key = `${this._prefix(category, subPath)}${remoteName}`;
+    const contentType = guessContentType(remoteName);
+    const s3 = await this._s3Client();
+    const created = await s3.send(
+      new CreateMultipartUploadCommand({ Bucket: S3_BUCKET, Key: key, ContentType: contentType })
+    );
+    const uploadId = created.UploadId;
+    const partCount = Math.max(1, Math.ceil(size / partSize));
+    const partUrls = [];
+    for (let partNumber = 1; partNumber <= partCount; partNumber++) {
+      const cmd = new UploadPartCommand({ Bucket: S3_BUCKET, Key: key, UploadId: uploadId, PartNumber: partNumber });
+      // long-lived: a slow uplink can legitimately take a long time to work
+      // through all the parts.
+      partUrls.push(await getSignedUrl(s3, cmd, { expiresIn: 6 * 3600 }));
+    }
+    return { key, uploadId, partSize, partUrls, contentType, publicUrl: publicUrlOf(key) };
+  }
+
+  // Finalize by reading the parts' ETags server-side via ListParts, so the
+  // browser never needs the ETag response header (which cross-origin CORS
+  // may not expose to it) - much more robust than collecting ETags client-side.
+  async completeMultipartUpload(key, uploadId) {
+    const s3 = await this._s3Client();
+    const listed = await s3.send(new ListPartsCommand({ Bucket: S3_BUCKET, Key: key, UploadId: uploadId }));
+    const parts = (listed.Parts || [])
+      .map((p) => ({ PartNumber: p.PartNumber, ETag: p.ETag }))
+      .sort((a, b) => a.PartNumber - b.PartNumber);
+    if (!parts.length) throw new Error("no parts uploaded");
+    await s3.send(
+      new CompleteMultipartUploadCommand({
+        Bucket: S3_BUCKET,
+        Key: key,
+        UploadId: uploadId,
+        MultipartUpload: { Parts: parts },
+      })
+    );
+    const head = await s3.send(new HeadObjectCommand({ Bucket: S3_BUCKET, Key: key }));
+    const category = key.split("/")[2];
+    return toFileObject(key, head.ContentLength, head.LastModified, category);
+  }
+
+  async abortMultipartUpload(key, uploadId) {
+    const s3 = await this._s3Client();
+    try {
+      await s3.send(new AbortMultipartUploadCommand({ Bucket: S3_BUCKET, Key: key, UploadId: uploadId }));
+    } catch {
+      /* best effort */
+    }
+  }
+
   // Returns the object's size, or null if it isn't there (yet).
   async objectExists(key) {
     const s3 = await this._s3Client();
@@ -556,13 +626,46 @@ export class CloudGateClient {
   }
 
   // ---- metadata ----
+  // Self-computed, so it includes custom categories. CloudGate's own
+  // bucketMetaData Lambda only knows about its built-in folders, so anything
+  // in a custom category (e.g. 100gig-strg) simply didn't show up in the
+  // totals before. One list per category, aggregated here.
   async storageStats() {
-    const idToken = await this._refreshIdToken();
-    const resp = await fetch(`${BUCKET_META_ENDPOINT}?user_folder=${encodeURIComponent(this.email)}`, {
-      headers: { Authorization: `Bearer ${idToken}` },
-    });
-    if (!resp.ok) throw new Error(`bucketMetaData failed: ${resp.status}`);
-    return resp.json();
+    const categories = await this.listCategories();
+    const s3 = await this._s3Client();
+    const folderStats = {};
+    let totalBytes = 0;
+
+    await Promise.all(
+      categories.map(async ({ id: category }) => {
+        const prefix = this._prefix(category);
+        let count = 0;
+        let bytes = 0;
+        let token;
+        do {
+          const page = await s3.send(
+            new ListObjectsV2Command({ Bucket: S3_BUCKET, Prefix: prefix, ContinuationToken: token })
+          );
+          for (const obj of page.Contents || []) {
+            if (obj.Key === prefix || obj.Key.endsWith("/")) continue;
+            const relParts = obj.Key.slice(prefix.length).split("/");
+            relParts.pop();
+            if (relParts.some((p) => RESERVED_FOLDERS.has(p))) continue;
+            count += 1;
+            bytes += obj.Size;
+          }
+          token = page.NextContinuationToken;
+        } while (token);
+        folderStats[category] = { count, size_bytes: bytes, formatted_size: formatBytes(bytes) };
+        totalBytes += bytes;
+      })
+    );
+
+    return {
+      folder_stats: folderStats,
+      total_size_bytes: totalBytes,
+      formatted_total_size: formatBytes(totalBytes),
+    };
   }
 
   async _graphql(operationName, variables, query) {
