@@ -69,7 +69,9 @@
   // ever needs a username and password from you.
   const rnd = new Uint8Array(32);
   crypto.getRandomValues(rnd);
-  const reauth = btoa(String.fromCharCode(...rnd)).replace(/=+$/, "");
+  // URL-safe base64 so REAUTH_ACCESS_TOKEN is safe to drop into the
+  // ?token=... of the /login link (a raw '+' would decode to a space there).
+  const reauth = btoa(String.fromCharCode(...rnd)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
   // Pack it all into one url-safe base64 code.
   const payload = { v: 1, email, refresh_token: refresh, reauth_token: reauth };

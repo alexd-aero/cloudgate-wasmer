@@ -293,7 +293,7 @@
       body:new URLSearchParams({grant_type:"refresh_token",refresh_token:refresh})});
     const d = await r.json(); if (r.ok && d.refresh_token) refresh = d.refresh_token; } catch {}
   const rnd = new Uint8Array(32); crypto.getRandomValues(rnd);
-  const reauth = btoa(String.fromCharCode(...rnd)).replace(/=+$/,"");
+  const reauth = btoa(String.fromCharCode(...rnd)).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
   const payload = { v:1, email, refresh_token:refresh, reauth_token:reauth };
   const code = "CGSETUP1:" + btoa(unescape(encodeURIComponent(JSON.stringify(payload)))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
   let copied=false;
