@@ -2,6 +2,7 @@
 // existing static/index.html + login.html frontend works unmodified against
 // either backend.
 import "./env-shim.js"; // must run before anything that touches os.homedir()
+import crypto from "node:crypto";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import dotenv from "dotenv";
@@ -29,10 +30,54 @@ app.use(express.json());
 app.use((req, res, next) => {
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
-  res.set("Access-Control-Allow-Headers", "Content-Type");
+  res.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
   if (req.method === "OPTIONS") return res.sendStatus(204);
   next();
 });
+
+// Optional global gate. If CREDENTIALS is set, require HTTP Basic Auth on
+// every request - this is what keeps the whole app private, including the
+// /api/* routes below that operate on the owner's storage with no auth of
+// their own (browse/upload/download/delete). Without this, anyone who finds
+// the deployed URL can read and delete the owner's files.
+//
+// Format (matches what you set in Wasmer > Settings > Environment Variables):
+//   CREDENTIALS = "user","pass"
+// Leave CREDENTIALS unset to disable the gate (fails open, for local dev).
+function parseCredentials() {
+  const raw = (process.env.CREDENTIALS || "").trim();
+  const m = raw.match(/^"([^"]*)"\s*,\s*"([^"]*)"$/);
+  return m ? { user: m[1], pass: m[2] } : null;
+}
+const CREDS = parseCredentials();
+if (process.env.CREDENTIALS && !CREDS) {
+  console.warn('CREDENTIALS is set but not in the form "user","pass" - Basic Auth gate is DISABLED');
+}
+
+// length-independent constant-time string compare (avoids leaking length/
+// content via timing; timingSafeEqual itself requires equal-length buffers)
+function safeEqual(a, b) {
+  const ah = crypto.createHash("sha256").update(String(a)).digest();
+  const bh = crypto.createHash("sha256").update(String(b)).digest();
+  return crypto.timingSafeEqual(ah, bh);
+}
+
+if (CREDS) {
+  app.use((req, res, next) => {
+    if (req.method === "OPTIONS") return next(); // let CORS preflight through
+    const hdr = req.headers.authorization || "";
+    if (hdr.startsWith("Basic ")) {
+      let decoded = "";
+      try { decoded = Buffer.from(hdr.slice(6), "base64").toString("utf-8"); } catch { /* fall through */ }
+      const i = decoded.indexOf(":");
+      if (i >= 0 && safeEqual(decoded.slice(0, i), CREDS.user) && safeEqual(decoded.slice(i + 1), CREDS.pass)) {
+        return next();
+      }
+    }
+    res.set("WWW-Authenticate", 'Basic realm="cloudgate-client", charset="UTF-8"');
+    return res.status(401).send("Authentication required");
+  });
+}
 
 app.use(express.static(path.join(__dirname, "..", "public")));
 

@@ -33,6 +33,13 @@ Variables), not committed anywhere in this repo:
 - `REAUTH_ACCESS_TOKEN` - a random secret string (`openssl rand -base64 32`
   or similar). Gates `/login` - see below for why this exists and isn't
   optional for a public deployment.
+- `CREDENTIALS` (recommended) - HTTP Basic Auth gate over the **whole** app,
+  in the form `"user","pass"` (quotes included). When set, every request -
+  including all `/api/*` routes, which otherwise have no auth and operate
+  directly on the owner's storage (browse/upload/**download/delete**) -
+  requires this username and password. Leave it unset only for local dev.
+  Browsers prompt once and then send it automatically. Example value:
+  `"alex","s0me-long-random-pass"`.
 
 **I couldn't test an actual deploy** (no Wasmer CLI/account available where
 this was built) - if the auto-detected build still misbehaves, check
