@@ -16,14 +16,25 @@ touches anyone else's data.
 
 ## Deploy it (the short version)
 
-1. **Get your own private copy of this repo** (fork it, or push these files to
-   a new repo). If you're going to commit your credentials into `app.yaml`
-   (below), the repo **must be private** — it will contain your secrets.
-2. **Deploy to Wasmer** — dashboard → *Deploy → Import a Git repository* → pick
-   your repo. Or `wasmer deploy` from the CLI. Node.js is auto-detected.
-3. **Open `/setup` on your new URL** (`https://your-app.wasmer.app/setup`). That
-   page walks you through capturing your CloudGate token and generating the
-   env config to paste back into `app.yaml`, then redeploy.
+1. **Fork this repo, then make your fork private.** Forks start public and can't
+   be made private until they leave the fork network first:
+   [**fork it**](https://github.com/alexd-aero/cloudgate-wasmer/fork) →
+   Settings → General → Danger Zone → **Leave fork network** → wait for the
+   detach to finish (GitHub does it in the background, usually **2+ minutes**;
+   the repo may 404 briefly) → then Danger Zone → **Change repository
+   visibility → Private**. (Alternatively, skip the wait: create a fresh
+   private repo and push these files into it.)
+   Your credentials will be committed into `app.yaml`, so the repo **must** be
+   private.
+2. **Get your config from the `/setup` helper.** Open `public/setup.html` (or
+   the `/setup` page of any running instance). It walks you through running the
+   one-line console script in your CloudGate tab, pasting the resulting setup
+   code, choosing a username/password, and copying a finished `app.yaml` `env:`
+   block. Paste that into your fork's `app.yaml`, commit, and push.
+3. **Deploy on Wasmer.** Dashboard → *Deploy → Import a Git repository* → pick
+   your private fork. Node.js is auto-detected. **No environment variables need
+   to be set in Wasmer** — they're already in `app.yaml`. Open your
+   `*.wasmer.app` URL and log in with the username/password you chose.
 
 That's it. Details below.
 

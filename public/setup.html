@@ -7,128 +7,263 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <style>
   :root {
-    --bg-0:#0b0b12; --glass:rgba(255,255,255,.06); --glass-strong:rgba(255,255,255,.10);
-    --bd:rgba(255,255,255,.14); --text:#f3f3f7; --dim:#a3a3b3; --accent:#7c6df2;
-    --accent-hover:#9186f5; --blue:#4285F4; --purple:#A142F4; --green:#34A853;
-    --yellow:#FBBC05; --danger:#f2695f; --radius:16px;
+    --bg-0:#0a0a10; --bg-1:#0e0e17;
+    --glass:rgba(255,255,255,.045); --glass-2:rgba(255,255,255,.08);
+    --bd:rgba(255,255,255,.10); --bd-2:rgba(255,255,255,.16);
+    --text:#f4f4f8; --dim:#9a9aac; --faint:#6f6f80;
+    --accent:#7c6df2; --accent-2:#a142f4; --blue:#4285F4; --green:#34A853;
+    --yellow:#f5b544; --danger:#f2695f;
+    --radius:18px; --radius-sm:10px;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
   }
   * { box-sizing:border-box; }
   html,body { margin:0; min-height:100%; }
   body {
-    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-    background:var(--bg-0); color:var(--text); padding:32px 16px; line-height:1.5;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,sans-serif;
+    background:radial-gradient(1200px 600px at 80% -10%, #17172a 0%, var(--bg-0) 55%);
+    color:var(--text); line-height:1.55; -webkit-font-smoothing:antialiased;
+    padding:48px 20px 80px;
   }
-  .wrap { max-width:720px; margin:0 auto; }
-  .blob { position:fixed; border-radius:50%; filter:blur(100px); opacity:.28; z-index:0; }
-  .blob.b1 { width:460px; height:460px; background:var(--blue); top:-160px; left:-120px; }
-  .blob.b2 { width:420px; height:420px; background:var(--purple); bottom:-180px; right:-140px; }
-  .wrap > * { position:relative; z-index:1; }
-  h1 { font-size:24px; margin:0 0 6px; display:flex; align-items:center; gap:12px; }
-  .logo { width:40px; height:40px; border-radius:11px; display:flex; align-items:center;
-    justify-content:center; font-size:19px; color:#fff;
-    background:linear-gradient(135deg,var(--blue),var(--purple)); }
-  .sub { color:var(--dim); font-size:14px; margin:0 0 28px; }
-  .card { background:var(--glass); border:1px solid var(--bd); border-radius:var(--radius);
-    padding:22px; margin-bottom:20px; backdrop-filter:blur(20px); }
-  .step { font-size:12px; text-transform:uppercase; letter-spacing:.9px; color:var(--accent);
-    font-weight:700; margin:0 0 4px; }
-  .card h2 { font-size:17px; margin:0 0 10px; }
-  .card p { font-size:13px; color:var(--dim); margin:0 0 14px; }
-  label { display:block; font-size:12px; color:var(--dim); margin:14px 0 5px; font-weight:600; }
-  input, textarea {
-    width:100%; background:#00000055; color:var(--text); border:1px solid var(--bd);
-    border-radius:10px; padding:11px 12px; font-size:13px;
-    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
-  }
-  input:focus, textarea:focus { outline:none; border-color:var(--accent); }
-  textarea { resize:vertical; min-height:70px; word-break:break-all; }
-  button {
-    border:none; border-radius:10px; padding:10px 16px; font-size:13px; font-weight:600;
-    cursor:pointer; white-space:nowrap; display:inline-flex; align-items:center; gap:7px;
-  }
-  .copy { background:var(--blue); color:#fff; }
-  .copy.done { background:var(--green); }
-  pre { background:#00000066; border:1px solid var(--bd); border-radius:10px; padding:14px;
-    font-size:12px; overflow:auto; max-height:300px; margin:0; white-space:pre-wrap;
-    word-break:break-word; }
-  .hint { font-size:12px; color:var(--dim); margin-top:8px; }
-  .ok { color:var(--green); } .err { color:var(--danger); } .warn { color:var(--yellow); }
+  .wrap { max-width:740px; margin:0 auto; }
+
+  /* header */
+  header { margin-bottom:36px; }
+  .brand { display:flex; align-items:center; gap:14px; margin-bottom:14px; }
+  .logo { width:46px; height:46px; border-radius:13px; display:flex; align-items:center;
+    justify-content:center; font-size:21px; color:#fff; flex:none;
+    background:linear-gradient(140deg,var(--blue),var(--accent-2));
+    box-shadow:0 6px 20px rgba(124,109,242,.35); }
+  .brand h1 { font-size:22px; margin:0; letter-spacing:-.2px; }
+  .brand .tag { font-size:12.5px; color:var(--dim); margin-top:2px; }
+  .lead { font-size:14px; color:var(--dim); margin:0; max-width:60ch; }
+  .lead strong { color:var(--text); font-weight:600; }
+
+  /* steps */
+  .step { display:grid; grid-template-columns:34px 1fr; gap:18px; position:relative;
+    padding-bottom:26px; }
+  .step:not(:last-child)::before { content:""; position:absolute; left:16px; top:40px;
+    bottom:-4px; width:2px; background:linear-gradient(var(--bd-2),transparent); }
+  .num { width:34px; height:34px; border-radius:50%; display:flex; align-items:center;
+    justify-content:center; font-size:14px; font-weight:700; color:#fff; flex:none;
+    background:linear-gradient(140deg,var(--accent),var(--accent-2));
+    box-shadow:0 3px 10px rgba(124,109,242,.4); z-index:1; }
+  .step-body { min-width:0; }
+  .step-body h2 { font-size:16.5px; margin:4px 0 4px; letter-spacing:-.1px; }
+  .step-body > p { font-size:13.5px; color:var(--dim); margin:0 0 14px; }
+
+  .panel { background:var(--glass); border:1px solid var(--bd); border-radius:var(--radius);
+    padding:18px; margin-top:12px; backdrop-filter:blur(16px); }
+
+  ol.clean { list-style:none; counter-reset:s; padding:0; margin:0; }
+  ol.clean li { counter-increment:s; position:relative; padding:7px 0 7px 30px;
+    font-size:13.5px; color:var(--text); border-bottom:1px solid var(--bd); }
+  ol.clean li:last-child { border-bottom:none; }
+  ol.clean li::before { content:counter(s); position:absolute; left:0; top:7px;
+    width:20px; height:20px; border-radius:6px; background:var(--glass-2);
+    border:1px solid var(--bd); color:var(--dim); font-size:11px; font-weight:700;
+    display:flex; align-items:center; justify-content:center; }
+  ol.clean li .muted { color:var(--dim); }
+
+  .callout { display:flex; gap:10px; align-items:flex-start; border-radius:var(--radius-sm);
+    padding:11px 13px; font-size:12.5px; margin-top:12px; border:1px solid; line-height:1.5; }
+  .callout i { margin-top:2px; flex:none; }
+  .callout.info { background:rgba(66,133,244,.09); border-color:rgba(66,133,244,.3); color:#bcd2ff; }
+  .callout.warn { background:rgba(245,181,68,.09); border-color:rgba(245,181,68,.32); color:#f6d79a; }
+  .callout.good { background:rgba(52,168,83,.09); border-color:rgba(52,168,83,.32); color:#a6e6bb; }
+
+  label { display:block; font-size:12px; color:var(--dim); margin:14px 0 6px; font-weight:600; }
+  label:first-child { margin-top:0; }
+  label .k { color:var(--faint); font-weight:500; }
+  input, textarea { width:100%; background:rgba(0,0,0,.32); color:var(--text);
+    border:1px solid var(--bd); border-radius:var(--radius-sm); padding:11px 13px;
+    font-size:13px; font-family:var(--mono); transition:border-color .15s; }
+  input::placeholder, textarea::placeholder { color:var(--faint); }
+  input:focus, textarea:focus { outline:none; border-color:var(--accent);
+    box-shadow:0 0 0 3px rgba(124,109,242,.16); }
+  textarea { resize:vertical; min-height:74px; word-break:break-all; }
   .row2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
   @media (max-width:520px){ .row2 { grid-template-columns:1fr; } }
-  .toolbar { display:flex; gap:8px; align-items:center; margin:6px 0 8px; }
-  .toolbar .spacer { flex:1; }
-  code { background:#ffffff14; padding:1px 5px; border-radius:5px; font-size:12px; }
-  ol { padding-left:20px; font-size:13px; color:var(--dim); }
-  ol li { margin:6px 0; }
-  #code-status { font-size:12px; margin-top:8px; min-height:16px; }
-  .locked { opacity:.5; pointer-events:none; }
+
+  button, a.btn { border:none; border-radius:var(--radius-sm); padding:10px 16px;
+    font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; text-decoration:none;
+    display:inline-flex; align-items:center; gap:8px; transition:filter .15s, background .15s; }
+  button:disabled { opacity:.5; cursor:default; }
+  .btn-gh { background:#1f1f28; color:#fff; border:1px solid var(--bd-2); }
+  .btn-gh:hover { background:#26263180; filter:brightness(1.15); }
+  .btn-wasmer { background:linear-gradient(135deg,var(--accent),var(--accent-2)); color:#fff; }
+  .btn-wasmer:hover { filter:brightness(1.08); }
+  .copy { background:var(--blue); color:#fff; }
+  .copy:hover { filter:brightness(1.08); }
+  .copy.done { background:var(--green); }
+
+  .code-head { display:flex; align-items:center; gap:10px; margin:0 0 8px; }
+  .code-head .fn { font-family:var(--mono); font-size:11.5px; color:var(--dim);
+    background:var(--glass-2); border:1px solid var(--bd); padding:3px 9px; border-radius:7px; }
+  .code-head .spacer { flex:1; }
+  pre { background:rgba(0,0,0,.4); border:1px solid var(--bd); border-radius:var(--radius-sm);
+    padding:14px; font-size:12px; font-family:var(--mono); overflow:auto; max-height:300px;
+    margin:0; white-space:pre-wrap; word-break:break-word; color:#e6e6f0; }
+  code { background:var(--glass-2); padding:1.5px 6px; border-radius:6px; font-size:12px;
+    font-family:var(--mono); }
+  .status { font-size:12.5px; margin-top:10px; min-height:16px; display:flex; gap:7px;
+    align-items:center; }
+  .status.ok { color:var(--green); } .status.err { color:var(--danger); }
+  .locked { opacity:.45; pointer-events:none; filter:grayscale(.3); }
+  .divider { height:1px; background:var(--bd); margin:18px 0; }
+  .foot { text-align:center; font-size:12px; color:var(--faint); margin-top:20px; }
+  .foot a { color:var(--dim); }
 </style>
 </head>
 <body>
-<div class="blob b1"></div>
-<div class="blob b2"></div>
 <div class="wrap">
-  <h1><span class="logo"><i class="fa-solid fa-cloud"></i></span> CloudGate Client setup</h1>
-  <p class="sub">Three steps. Everything runs in your browser — nothing is uploaded.</p>
-
-  <!-- STEP 1 -->
-  <div class="card">
-    <p class="step">Step 1</p>
-    <h2>Run the script &amp; copy your setup code</h2>
-    <ol>
-      <li>Open the <strong>CloudGate web app</strong> in another tab and sign in.</li>
-      <li>There, open <strong>DevTools → Console</strong> (<code>F12</code>).</li>
-      <li>Click <strong>Copy script</strong>, paste it into that console, press Enter.</li>
-      <li>It copies a single <strong>setup code</strong> to your clipboard. Come back here.</li>
-    </ol>
-    <div class="toolbar">
-      <span class="hint">Reads your own logged-in session &amp; sends nothing anywhere.</span>
-      <span class="spacer"></span>
-      <button class="copy" id="copy-script"><i class="fa-regular fa-copy"></i> Copy script</button>
-    </div>
-    <pre id="script-view"></pre>
-  </div>
-
-  <!-- STEP 2 -->
-  <div class="card">
-    <p class="step">Step 2</p>
-    <h2>Paste it, then pick a username &amp; password</h2>
-    <p>Paste the setup code — it fills in your email, refresh token and access key
-    automatically. Then all you choose is the login for this app.</p>
-
-    <label>Setup code</label>
-    <textarea id="in-code" placeholder="Paste your CGSETUP1:… code here"></textarea>
-    <div id="code-status"></div>
-
-    <div id="creds-block" class="locked">
-      <label>Username &amp; password <span class="dim">→ the login that gates this app
-        (<code>CREDENTIALS</code>)</span></label>
-      <div class="row2">
-        <input id="in-user" placeholder="username" autocomplete="off">
-        <input id="in-pass" placeholder="password" autocomplete="off">
+  <header>
+    <div class="brand">
+      <span class="logo"><i class="fa-solid fa-cloud"></i></span>
+      <div>
+        <h1>CloudGate Client · Setup</h1>
+        <div class="tag">Self-host your own CloudGate storage on Wasmer Edge</div>
       </div>
-      <p class="hint">Stored as <code id="creds-preview">"username","password"</code></p>
+    </div>
+    <p class="lead">Five steps, ~10 minutes. Everything below runs in <strong>your</strong>
+    browser and connects to <strong>your</strong> CloudGate account — nothing is uploaded to
+    this server.</p>
+  </header>
+
+  <!-- STEP 1 — fork & privatise -->
+  <div class="step">
+    <div class="num">1</div>
+    <div class="step-body">
+      <h2>Fork the repo &amp; make it private</h2>
+      <p>You'll commit your credentials into this repo, so it must be private. Forks start
+      public and can't be flipped to private until they leave the fork network first.</p>
+      <div class="panel">
+        <a class="btn btn-gh" href="https://github.com/alexd-aero/cloudgate-wasmer/fork" target="_blank" rel="noopener">
+          <i class="fa-brands fa-github"></i> Fork alexd-aero/cloudgate-wasmer</a>
+        <div class="divider"></div>
+        <ol class="clean">
+          <li>Fork it to your account (button above).</li>
+          <li>In your fork: <strong>Settings → General → Danger Zone → Leave fork network</strong>
+            <span class="muted">— this detaches it so it can be made private.</span></li>
+          <li><strong>Wait for the detach to finish</strong> <span class="muted">— GitHub processes
+            it in the background, usually 2+ minutes. The repo may 404 briefly; that's normal.</span></li>
+          <li>Once done: <strong>Settings → General → Danger Zone → Change repository visibility →
+            Private</strong>.</li>
+        </ol>
+        <div class="callout warn"><i class="fa-solid fa-triangle-exclamation"></i>
+          <span>Don't add your credentials (Step 4) until the repo is <strong>private</strong>.
+          A public repo with them in it hands over your CloudGate account.</span></div>
+        <div class="callout info"><i class="fa-solid fa-circle-info"></i>
+          <span>Prefer not to wait on detachment? Instead create a fresh <em>private</em> repo and
+          push these files into it — no fork network to leave.</span></div>
+      </div>
     </div>
   </div>
 
-  <!-- STEP 3 -->
-  <div class="card">
-    <p class="step">Step 3</p>
-    <h2>Copy your config &amp; deploy</h2>
-    <p>Paste this <code>env:</code> block into <code>app.yaml</code> in your
-    <strong>private</strong> repo, commit, and deploy on Wasmer.</p>
-    <div class="toolbar">
-      <span class="hint">app.yaml</span>
-      <span class="spacer"></span>
-      <button class="copy" id="copy-appyaml"><i class="fa-regular fa-copy"></i> Copy app.yaml</button>
+  <!-- STEP 2 — run script -->
+  <div class="step">
+    <div class="num">2</div>
+    <div class="step-body">
+      <h2>Run the script, copy your setup code</h2>
+      <p>This grabs your CloudGate token from the session you're already signed into and packs
+      it into one code — nothing leaves your browser.</p>
+      <div class="panel">
+        <ol class="clean" style="margin-bottom:14px">
+          <li>Open the <strong>CloudGate web app</strong> in another tab and sign in.</li>
+          <li>There, open <strong>DevTools → Console</strong> <span class="muted">(press
+            <code>F12</code>)</span>.</li>
+          <li>Click <strong>Copy script</strong>, paste into that console, press Enter.</li>
+          <li>It copies a single <strong>setup code</strong> to your clipboard.</li>
+        </ol>
+        <div class="code-head">
+          <span class="fn">console snippet</span><span class="spacer"></span>
+          <button class="copy" id="copy-script"><i class="fa-regular fa-copy"></i> Copy script</button>
+        </div>
+        <pre id="script-view"></pre>
+      </div>
     </div>
-    <pre id="out-appyaml"></pre>
-    <div class="toolbar" style="margin-top:16px">
-      <span class="hint">.env (for running locally)</span>
-      <span class="spacer"></span>
-      <button class="copy" id="copy-dotenv"><i class="fa-regular fa-copy"></i> Copy .env</button>
+  </div>
+
+  <!-- STEP 3 — paste + login -->
+  <div class="step">
+    <div class="num">3</div>
+    <div class="step-body">
+      <h2>Paste it, then pick a login</h2>
+      <p>The code fills in your email, refresh token and access key automatically. The only thing
+      you choose is the username and password for this app.</p>
+      <div class="panel">
+        <label>Setup code</label>
+        <textarea id="in-code" placeholder="Paste your CGSETUP1:… code here"></textarea>
+        <div id="code-status" class="status"></div>
+
+        <div id="creds-block" class="locked">
+          <div class="divider"></div>
+          <label>Username &amp; password <span class="k">→ CREDENTIALS · the login that gates the app</span></label>
+          <div class="row2">
+            <input id="in-user" placeholder="username" autocomplete="off">
+            <input id="in-pass" placeholder="password" autocomplete="off">
+          </div>
+          <div class="status">Stored as <code id="creds-preview">"username","password"</code></div>
+        </div>
+      </div>
     </div>
-    <pre id="out-dotenv"></pre>
+  </div>
+
+  <!-- STEP 4 — app.yaml -->
+  <div class="step">
+    <div class="num">4</div>
+    <div class="step-body">
+      <h2>Paste this into <code>app.yaml</code></h2>
+      <p>Replace the top of <code>app.yaml</code> in your private fork with this, then commit and
+      push. Your secrets live here — which is why the repo is private.</p>
+      <div class="panel">
+        <div class="code-head">
+          <span class="fn">app.yaml</span><span class="spacer"></span>
+          <button class="copy" id="copy-appyaml"><i class="fa-regular fa-copy"></i> Copy</button>
+        </div>
+        <pre id="out-appyaml"></pre>
+        <div class="divider"></div>
+        <div class="code-head">
+          <span class="fn">.env</span>
+          <span class="muted" style="font-size:11.5px;color:var(--faint)">optional — for running locally</span>
+          <span class="spacer"></span>
+          <button class="copy" id="copy-dotenv"><i class="fa-regular fa-copy"></i> Copy</button>
+        </div>
+        <pre id="out-dotenv"></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 5 — deploy -->
+  <div class="step">
+    <div class="num">5</div>
+    <div class="step-body">
+      <h2>Deploy on Wasmer</h2>
+      <p>Point Wasmer at your private repo and deploy. That's it.</p>
+      <div class="panel">
+        <a class="btn btn-wasmer" href="https://wasmer.io/app/create" target="_blank" rel="noopener">
+          <i class="fa-solid fa-rocket"></i> Open Wasmer → Create app</a>
+        <div class="divider"></div>
+        <ol class="clean">
+          <li><strong>Deploy → Import a Git repository</strong>, authorize GitHub, pick your
+            private fork.</li>
+          <li>Node.js is auto-detected <span class="muted">(no build settings to change)</span>.
+            Deploy.</li>
+          <li>Open your new <code>*.wasmer.app</code> URL and log in with the username/password
+            from Step 3.</li>
+        </ol>
+        <div class="callout good"><i class="fa-solid fa-circle-check"></i>
+          <span><strong>No environment variables to set in Wasmer</strong> — they're already in
+          your <code>app.yaml</code>, and Wasmer reads them from there on deploy.</span></div>
+        <div class="callout info"><i class="fa-solid fa-circle-info"></i>
+          <span>If a check ever shows the app loading without a login prompt, your plan may not
+          apply <code>app.yaml</code> env — in that case add the same four variables under the
+          app's <strong>Settings → Environment Variables</strong> and redeploy.</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">
+    Source: <a href="https://github.com/alexd-aero/cloudgate-wasmer" target="_blank" rel="noopener">github.com/alexd-aero/cloudgate-wasmer</a>
   </div>
 </div>
 
@@ -186,7 +321,6 @@
   }
   $("copy-script").onclick = (e) => copyText(scriptText, e.currentTarget);
 
-  // ---- parse the setup code --------------------------------------------
   let parsed = null; // { email, refresh_token, reauth_token }
   function parseCode(s) {
     s = (s || "").trim();
@@ -195,8 +329,7 @@
     let b64 = s.slice(PFX.length).replace(/-/g, "+").replace(/_/g, "/");
     while (b64.length % 4) b64 += "=";
     try {
-      const json = decodeURIComponent(escape(atob(b64)));
-      const p = JSON.parse(json);
+      const p = JSON.parse(decodeURIComponent(escape(atob(b64))));
       if (!p || !p.refresh_token || !p.email) return null;
       return p;
     } catch { return null; }
@@ -209,8 +342,8 @@
     const creds = credsValue();
     $("creds-preview").textContent = creds;
     const email = parsed ? parsed.email : "you@example.com";
-    const refresh = parsed ? parsed.refresh_token : "PASTE-SETUP-CODE-IN-STEP-2";
-    const reauth = parsed ? parsed.reauth_token : "PASTE-SETUP-CODE-IN-STEP-2";
+    const refresh = parsed ? parsed.refresh_token : "PASTE-SETUP-CODE-IN-STEP-3";
+    const reauth = parsed ? parsed.reauth_token : "PASTE-SETUP-CODE-IN-STEP-3";
     const dq = (s) => '"' + String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
 
     $("out-appyaml").textContent =
@@ -240,16 +373,16 @@ CREDENTIALS=${creds}`;
     const status = $("code-status");
     const block = $("creds-block");
     if (parsed) {
-      status.className = "ok"; status.innerHTML =
-        '<i class="fa-solid fa-check"></i> Loaded — signed in as <strong>' +
-        parsed.email.replace(/[<>&]/g, "") + "</strong>. Just choose a username &amp; password below.";
+      status.className = "status ok";
+      status.innerHTML = '<i class="fa-solid fa-check"></i> Loaded — signed in as <strong>' +
+        parsed.email.replace(/[<>&]/g, "") + "</strong>. Now choose a username &amp; password.";
       block.classList.remove("locked");
     } else if ($("in-code").value.trim()) {
-      status.className = "err";
-      status.textContent = "That doesn't look like a valid setup code (should start with CGSETUP1:).";
+      status.className = "status err";
+      status.innerHTML = '<i class="fa-solid fa-xmark"></i> That isn\'t a valid setup code (it should start with CGSETUP1:).';
       block.classList.add("locked");
     } else {
-      status.className = "hint"; status.textContent = "";
+      status.className = "status"; status.textContent = "";
       block.classList.add("locked");
     }
     render();
