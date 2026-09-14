@@ -32,23 +32,21 @@ That's it. Details below.
 ## The `/setup` page
 
 Visit **`/setup`** on your deployment (or open `public/setup.html` locally). It
-runs entirely in your browser and stores nothing on the server. It:
+runs entirely in your browser and stores nothing on the server. Three steps:
 
-- **Captures your CloudGate refresh token.** It gives you a one-line console
-  script (with a **Copy** button) to run in your CloudGate tab — it reads the
-  session you're already signed into, refreshes it, prints your tokens, and
-  copies the refresh token to your clipboard. (There's also a best-effort
-  "Sign in with Google" button, but it only works if this app's domain is
-  allow-listed in CloudGate's Firebase project, so the console script is the
-  reliable path.)
-- **Takes all your settings in one form** — email, refresh token, permanent
-  access token (with a *Generate* button), and the username/password
-  credentials — each with copy buttons.
-- **Generates your config.** As you type, it builds the `app.yaml` `env:` block
-  and a `.env` file, each with a **Copy** button. Paste the `app.yaml` block
-  into your (private) repo, commit, and redeploy.
+1. **Run the script, copy one setup code.** Click **Copy script**, paste it into
+   your CloudGate tab's DevTools console, and press Enter. It reads the session
+   you're already signed into, refreshes it, and copies a single **setup code**
+   to your clipboard (a url-safe blob that bundles your email, refresh token,
+   and a freshly generated access key). Nothing is uploaded anywhere.
+2. **Paste the code, pick a username & password.** Pasting the code auto-fills
+   everything — email, refresh token, and the permanent access key. The *only*
+   thing you enter by hand is the username and password that will gate the app.
+3. **Copy your config & deploy.** It builds the `app.yaml` `env:` block (and a
+   `.env`), each with a **Copy** button. Paste the block into your (private)
+   repo, commit, and deploy.
 
-The same capture script also lives at
+The same setup-code script also lives at
 [`get-cloudgate-token.console.js`](./get-cloudgate-token.console.js) if you'd
 rather grab it from the repo.
 

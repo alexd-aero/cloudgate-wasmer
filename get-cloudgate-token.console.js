@@ -1,5 +1,5 @@
 // ===========================================================================
-// Get your CloudGate tokens from the browser console.
+// CloudGate setup-code generator (run in your browser console).
 //
 // HOW TO USE:
 //   1. Open the CloudGate web app and sign in (the tab must be on CloudGate's
@@ -7,33 +7,29 @@
 //   2. Open DevTools > Console.
 //   3. Paste this whole file and press Enter.
 //
-// It reads the Firebase auth session your browser already stored for you,
-// refreshes it once against Google's token endpoint, prints YOUR refresh token
-// + a fresh ID token, and copies the refresh token to your clipboard. Nothing
-// is uploaded anywhere - only you see the output. Treat the refresh token like
-// a password.
+// It reads the Firebase session your browser already stored, refreshes it, and
+// copies ONE setup code to your clipboard - paste that into the app's /setup
+// page and it fills in everything (email, refresh token, and a generated
+// access key). Nothing is uploaded anywhere. Treat the code as a secret: it
+// contains your refresh token.
 // ===========================================================================
 (async () => {
   const API_KEY = "AIzaSyB1RHsJMh5Rfv1qfLqQ0hg4ktCghj22Ss4"; // CloudGate's public Firebase key
 
-  // Firebase v9+ persists the signed-in user in IndexedDB by default; older
-  // persistence used localStorage. Try both.
-  const fromIDB = () =>
-    new Promise((resolve) => {
-      let open;
-      try { open = indexedDB.open("firebaseLocalStorageDb"); } catch { return resolve([]); }
-      open.onerror = () => resolve([]);
-      open.onsuccess = () => {
-        const db = open.result;
-        if (!db.objectStoreNames.contains("firebaseLocalStorage")) return resolve([]);
-        const req = db.transaction("firebaseLocalStorage", "readonly")
-          .objectStore("firebaseLocalStorage").getAll();
-        req.onsuccess = () => resolve(req.result || []);
-        req.onerror = () => resolve([]);
-      };
-    });
-
-  const fromLocalStorage = () => {
+  const fromIDB = () => new Promise((resolve) => {
+    let open;
+    try { open = indexedDB.open("firebaseLocalStorageDb"); } catch { return resolve([]); }
+    open.onerror = () => resolve([]);
+    open.onsuccess = () => {
+      const db = open.result;
+      if (!db.objectStoreNames.contains("firebaseLocalStorage")) return resolve([]);
+      const req = db.transaction("firebaseLocalStorage", "readonly")
+        .objectStore("firebaseLocalStorage").getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => resolve([]);
+    };
+  });
+  const fromLS = () => {
     const out = [];
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
@@ -44,84 +40,60 @@
     return out;
   };
 
-  let records = await fromIDB();
-  if (!records.length) records = fromLocalStorage();
-
-  const rec = records.find((r) => (r.fbase_key || "").startsWith("firebase:authUser:"));
+  let recs = await fromIDB();
+  if (!recs.length) recs = fromLS();
+  const rec = recs.find((r) => (r.fbase_key || "").startsWith("firebase:authUser:"));
   if (!rec || !rec.value) {
-    console.error(
-      "%cNo CloudGate/Firebase session found on this origin.",
-      "color:#f2695f;font-weight:bold"
-    );
-    console.error("Make sure you're signed into CloudGate in THIS tab, then run this again.");
+    console.error("%cNo CloudGate session found on this origin.", "color:#f2695f;font-weight:bold");
+    console.error("Sign into CloudGate in THIS tab, then run this again.");
     return;
   }
 
-  const user = rec.value;
-  const stm = user.stsTokenManager || {};
-  const refreshToken = stm.refreshToken;
-  let idToken = stm.accessToken; // cached; may be expired - we refresh below
-  const email = user.email;
+  const stm = rec.value.stsTokenManager || {};
+  const email = rec.value.email;
+  let refresh = stm.refreshToken;
+  if (!refresh) { console.error("Session has no refresh token - sign out and back in."); return; }
 
-  if (!refreshToken) {
-    console.error("Found a session but no refresh token in it - try signing out and back in.");
-    return;
-  }
-
-  // The "requests" part: exchange the refresh token for a fresh ID token so you
-  // get a known-good, non-expired one. This is the same call the client makes.
+  // Refresh once so we hand over a known-good token (and pick up a rotated one).
   try {
-    const resp = await fetch(`https://securetoken.googleapis.com/v1/token?key=${API_KEY}`, {
+    const r = await fetch(`https://securetoken.googleapis.com/v1/token?key=${API_KEY}`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken }),
+      body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refresh }),
     });
-    const data = await resp.json();
-    if (resp.ok && data.id_token) {
-      idToken = data.id_token;
-      if (data.refresh_token) {
-        // Google may hand back a rotated refresh token - prefer that one.
-        rec.value.stsTokenManager.refreshToken = data.refresh_token;
-      }
-    } else {
-      console.warn("Token refresh call failed, showing the cached ID token instead:", data.error || data);
-    }
-  } catch (e) {
-    console.warn("Token refresh request errored, showing the cached ID token instead:", e.message);
-  }
+    const d = await r.json();
+    if (r.ok && d.refresh_token) refresh = d.refresh_token;
+  } catch { /* keep cached token */ }
 
-  const finalRefresh = rec.value.stsTokenManager.refreshToken || refreshToken;
+  // Generate the permanent access key (REAUTH_ACCESS_TOKEN) here so setup only
+  // ever needs a username and password from you.
+  const rnd = new Uint8Array(32);
+  crypto.getRandomValues(rnd);
+  const reauth = btoa(String.fromCharCode(...rnd)).replace(/=+$/, "");
 
-  console.log("%cYour CloudGate tokens", "font-weight:bold;font-size:14px");
-  console.log("%c(keep these secret - anyone with the refresh token can access your storage; nothing was uploaded)",
-    "color:#a3a3b3");
-  console.table({
-    email,
-    refresh_token: finalRefresh,
-    id_token: idToken,
-  });
+  // Pack it all into one url-safe base64 code.
+  const payload = { v: 1, email, refresh_token: refresh, reauth_token: reauth };
+  const b64 = btoa(unescape(encodeURIComponent(JSON.stringify(payload))))
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const code = "CGSETUP1:" + b64;
 
-  // Copy the refresh token to the clipboard so you can paste it straight into
-  // the setup form. Tries the async Clipboard API, then DevTools' copy(), then
-  // just leaves it on screen to copy by hand.
   let copied = false;
   try {
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      await navigator.clipboard.writeText(finalRefresh);
+      await navigator.clipboard.writeText(code);
       copied = true;
     }
   } catch { /* fall through */ }
   if (!copied && typeof copy === "function") {
-    try { copy(finalRefresh); copied = true; } catch { /* fall through */ }
+    try { copy(code); copied = true; } catch { /* fall through */ }
   }
-  console.log(
-    copied
-      ? "%c✓ refresh token copied to your clipboard - paste it into the setup page"
-      : "%c(couldn't auto-copy - select the refresh_token above and copy it manually)",
-    copied ? "color:#34A853;font-weight:bold" : "color:#FBBC05"
-  );
-  console.log("Set this as CLOUDGATE_REFRESH_TOKEN in your own client:\n", finalRefresh);
 
-  // Also returned so you can grab it programmatically from the console result.
-  return { email, refresh_token: finalRefresh, id_token: idToken };
+  console.log("%cCloudGate setup code" + (copied ? " (copied to clipboard)" : ""),
+    "font-weight:bold;font-size:14px;color:#34A853");
+  console.log("%cPaste it into your app's /setup page. Keep it secret - it holds your refresh token.",
+    "color:#a3a3b3");
+  console.log(code);
+  if (!copied) console.log("%c(auto-copy blocked - select the code above and copy it manually)", "color:#FBBC05");
+
+  return code;
 })();
