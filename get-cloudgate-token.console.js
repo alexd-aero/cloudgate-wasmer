@@ -8,10 +8,10 @@
 //   3. Paste this whole file and press Enter.
 //
 // It reads the Firebase auth session your browser already stored for you,
-// refreshes it once against Google's token endpoint, and prints YOUR refresh
-// token + a fresh ID token. Everything runs locally in your tab and NOTHING is
-// uploaded anywhere - only you see the output. Treat the refresh token like a
-// password.
+// refreshes it once against Google's token endpoint, prints YOUR refresh token
+// + a fresh ID token, and copies the refresh token to your clipboard. Nothing
+// is uploaded anywhere - only you see the output. Treat the refresh token like
+// a password.
 // ===========================================================================
 (async () => {
   const API_KEY = "AIzaSyB1RHsJMh5Rfv1qfLqQ0hg4ktCghj22Ss4"; // CloudGate's public Firebase key
@@ -100,6 +100,26 @@
     refresh_token: finalRefresh,
     id_token: idToken,
   });
+
+  // Copy the refresh token to the clipboard so you can paste it straight into
+  // the setup form. Tries the async Clipboard API, then DevTools' copy(), then
+  // just leaves it on screen to copy by hand.
+  let copied = false;
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(finalRefresh);
+      copied = true;
+    }
+  } catch { /* fall through */ }
+  if (!copied && typeof copy === "function") {
+    try { copy(finalRefresh); copied = true; } catch { /* fall through */ }
+  }
+  console.log(
+    copied
+      ? "%c✓ refresh token copied to your clipboard - paste it into the setup page"
+      : "%c(couldn't auto-copy - select the refresh_token above and copy it manually)",
+    copied ? "color:#34A853;font-weight:bold" : "color:#FBBC05"
+  );
   console.log("Set this as CLOUDGATE_REFRESH_TOKEN in your own client:\n", finalRefresh);
 
   // Also returned so you can grab it programmatically from the console result.

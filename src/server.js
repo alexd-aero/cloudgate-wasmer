@@ -105,6 +105,11 @@ const h = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 
 app.get("/", (req, res) => res.sendFile(path.join(__dirname, "..", "public", "index.html")));
 
+// First-run setup: capture your CloudGate token and generate the env config to
+// paste into app.yaml. Static middleware also serves this at /setup.html; this
+// is just a cleaner URL. Runs client-side only - it stores nothing server-side.
+app.get("/setup", (req, res) => res.sendFile(path.join(__dirname, "..", "public", "setup.html")));
+
 // /login is gated behind REAUTH_ACCESS_TOKEN: a public "Sign in with Google"
 // page with no gate is indistinguishable from an OAuth-phishing page to
 // automated abuse scanners (and to any stranger who finds the link) - it
