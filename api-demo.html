@@ -215,19 +215,19 @@
 </section>
 
 <section>
-  <h2>Download &amp; stream links</h2>
-  <div class="endpoint">GET /api/download?key= · GET /api/stream/&lt;filename&gt;?key=</div>
+  <h2>Direct download link</h2>
+  <div class="endpoint">CloudFront: https://d1dncmkdpaif79.cloudfront.net/&lt;key&gt;</div>
   <div class="row">
     <input id="link-key" placeholder="full key" style="min-width:320px">
-    <button onclick="buildLinks()">Build links</button>
+    <button onclick="buildLinks()">Build link</button>
   </div>
   <div id="link-output"></div>
   <div class="note">
-    Both links open fine when pasted into a new tab. Don't wire these to a
-    script-triggered <code>window.open()</code> for media files though -
-    Chrome downloads instead of playing/displaying them when the tab is
-    opened programmatically rather than by a real navigation. Copy the link
-    and open it yourself instead.
+    This is the raw CloudFront URL for the object - public, no login needed, and
+    it doesn't go through this app (so it works regardless of the CREDENTIALS
+    gate). Don't wire it to a script-triggered <code>window.open()</code> for
+    media files though - Chrome downloads instead of playing/displaying them
+    when the tab is opened programmatically. Copy the link and open it yourself.
   </div>
 </section>
 
@@ -539,14 +539,15 @@ async function deleteFile() {
   } catch (e) { showError("out-files2", e); }
 }
 
+const CLOUDFRONT_DOMAIN = "d1dncmkdpaif79.cloudfront.net";
 function buildLinks() {
-  const key = document.getElementById("link-key").value;
-  const filename = key.split("/").pop() || "file";
-  const downloadUrl = baseUrl() + "/api/download?key=" + encodeURIComponent(key);
-  const streamUrl = baseUrl() + "/api/stream/" + encodeURIComponent(filename) + "?key=" + encodeURIComponent(key);
-  document.getElementById("link-output").innerHTML =
-    "<div class='row'>Download: <a class='raw-link' href='" + downloadUrl + "'>" + downloadUrl + "</a></div>" +
-    "<div class='row'>Stream (redirects to CloudFront): <a class='raw-link' href='" + streamUrl + "'>" + streamUrl + "</a></div>";
+  const key = document.getElementById("link-key").value.trim();
+  const out = document.getElementById("link-output");
+  if (!key) { out.textContent = "Enter a full key first."; return; }
+  // Match the server's publicUrl: percent-encode, but keep the path slashes.
+  const rawUrl = "https://" + CLOUDFRONT_DOMAIN + "/" + encodeURIComponent(key).replace(/%2F/g, "/");
+  out.innerHTML =
+    "<div class='row'>Direct (CloudFront, public): <a class='raw-link' href='" + rawUrl + "' target='_blank' rel='noopener'>" + rawUrl + "</a></div>";
 }
 
 async function getContent() {
