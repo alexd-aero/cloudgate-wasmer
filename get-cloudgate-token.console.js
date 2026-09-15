@@ -79,23 +79,52 @@
     .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   const code = "CGSETUP1:" + b64;
 
-  let copied = false;
-  try {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      await navigator.clipboard.writeText(code);
-      copied = true;
+  // Clipboard writes from the console usually get blocked (they need a real
+  // user gesture), which is why copying by hand was needed. Instead, drop a big
+  // button onto the page - clicking it IS a gesture, so the copy just works.
+  document.getElementById("__cg_setup_overlay")?.remove();
+  const ov = document.createElement("div");
+  ov.id = "__cg_setup_overlay";
+  ov.style.cssText = "position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.6);" +
+    "display:flex;align-items:center;justify-content:center;" +
+    "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif";
+  const card = document.createElement("div");
+  card.style.cssText = "background:#12121a;color:#f4f4f8;border:1px solid rgba(255,255,255,.15);" +
+    "border-radius:16px;padding:26px;max-width:440px;width:90%;text-align:center;" +
+    "box-shadow:0 20px 60px rgba(0,0,0,.55)";
+  card.innerHTML = "<div style='font-size:19px;font-weight:700;margin-bottom:6px'>Setup code ready</div>" +
+    "<div style='font-size:13px;color:#9a9aac;margin-bottom:20px'>Click to copy, then paste it into the setup page. Keep it secret - it holds your refresh token.</div>";
+  const btn = document.createElement("button");
+  btn.textContent = "Copy setup code";
+  btn.style.cssText = "width:100%;padding:16px;font-size:16px;font-weight:700;border:none;" +
+    "border-radius:12px;cursor:pointer;color:#fff;background:linear-gradient(135deg,#7c6df2,#a142f4)";
+  const close = document.createElement("button");
+  close.textContent = "Close";
+  close.style.cssText = "margin-top:12px;background:none;border:none;color:#9a9aac;font-size:13px;cursor:pointer";
+  close.onclick = () => ov.remove();
+  btn.onclick = async () => {
+    let ok = false;
+    try { await navigator.clipboard.writeText(code); ok = true; } catch { /* fall through */ }
+    if (!ok) {
+      const ta = document.createElement("textarea");
+      ta.value = code; ta.style.cssText = "position:fixed;opacity:0";
+      document.body.appendChild(ta); ta.select();
+      try { ok = document.execCommand("copy"); } catch { /* fall through */ }
+      ta.remove();
     }
-  } catch { /* fall through */ }
-  if (!copied && typeof copy === "function") {
-    try { copy(code); copied = true; } catch { /* fall through */ }
-  }
+    btn.textContent = ok ? "Copied! Now paste it into the setup page" : "Copy failed - grab it from the console";
+    btn.style.background = ok ? "#34A853" : "#d9534f";
+    if (!ok) console.log(code);
+  };
+  card.appendChild(btn);
+  card.appendChild(document.createElement("br"));
+  card.appendChild(close);
+  ov.appendChild(card);
+  ov.addEventListener("click", (e) => { if (e.target === ov) ov.remove(); });
+  document.body.appendChild(ov);
 
-  console.log("%cCloudGate setup code" + (copied ? " (copied to clipboard)" : ""),
+  console.log("%cCloudGate setup code ready - click the button on the page to copy it.",
     "font-weight:bold;font-size:14px;color:#34A853");
-  console.log("%cPaste it into your app's /setup page. Keep it secret - it holds your refresh token.",
-    "color:#a3a3b3");
-  console.log(code);
-  if (!copied) console.log("%c(auto-copy blocked - select the code above and copy it manually)", "color:#FBBC05");
-
+  console.log(code); // fallback if the button UI can't render
   return code;
 })();

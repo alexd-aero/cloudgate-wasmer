@@ -45,11 +45,12 @@ That's it. Details below.
 Visit **`/setup`** on your deployment (or open `public/setup.html` locally). It
 runs entirely in your browser and stores nothing on the server. Three steps:
 
-1. **Run the script, copy one setup code.** Click **Copy script**, paste it into
-   your CloudGate tab's DevTools console, and press Enter. It reads the session
-   you're already signed into, refreshes it, and copies a single **setup code**
-   to your clipboard (a url-safe blob that bundles your email, refresh token,
-   and a freshly generated access key). Nothing is uploaded anywhere.
+1. **Run the script, click Copy.** Click **Copy script**, paste it into your
+   CloudGate tab's DevTools console, and press Enter. It reads the session
+   you're already signed into, refreshes it, and drops a big **Copy setup code**
+   button onto the page — click it to copy a single **setup code** (a url-safe
+   blob bundling your email, refresh token, and a freshly generated access key).
+   Nothing is uploaded anywhere.
 2. **Paste the code, pick a username & password.** Pasting the code auto-fills
    everything — email, refresh token, and the permanent access key. The *only*
    thing you enter by hand is the username and password that will gate the app.

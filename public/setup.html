@@ -172,7 +172,7 @@
           <li>There, open <strong>DevTools → Console</strong> <span class="muted">(press
             <code>F12</code>)</span>.</li>
           <li>Click <strong>Copy script</strong>, paste into that console, press Enter.</li>
-          <li>It copies a single <strong>setup code</strong> to your clipboard.</li>
+          <li>A <strong>Copy setup code</strong> button appears on the page — click it, come back here, and paste in Step 2.</li>
         </ol>
         <div class="code-head">
           <span class="fn">console snippet</span><span class="spacer"></span>
@@ -296,12 +296,31 @@
   const reauth = btoa(String.fromCharCode(...rnd)).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
   const payload = { v:1, email, refresh_token:refresh, reauth_token:reauth };
   const code = "CGSETUP1:" + btoa(unescape(encodeURIComponent(JSON.stringify(payload)))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
-  let copied=false;
-  try { await navigator.clipboard.writeText(code); copied=true; } catch {}
-  if (!copied && typeof copy==="function"){ try { copy(code); copied=true; } catch {} }
-  console.log("%cCloudGate setup code"+(copied?" (copied to clipboard)":""), "font-weight:bold;color:#34A853");
+  document.getElementById("__cg_setup_overlay")?.remove();
+  const ov = document.createElement("div"); ov.id = "__cg_setup_overlay";
+  ov.style.cssText = "position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif";
+  const card = document.createElement("div");
+  card.style.cssText = "background:#12121a;color:#f4f4f8;border:1px solid rgba(255,255,255,.15);border-radius:16px;padding:26px;max-width:440px;width:90%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.55)";
+  card.innerHTML = "<div style='font-size:19px;font-weight:700;margin-bottom:6px'>Setup code ready</div><div style='font-size:13px;color:#9a9aac;margin-bottom:20px'>Click to copy, then paste it into the setup page. Keep it secret - it holds your refresh token.</div>";
+  const btn = document.createElement("button");
+  btn.textContent = "Copy setup code";
+  btn.style.cssText = "width:100%;padding:16px;font-size:16px;font-weight:700;border:none;border-radius:12px;cursor:pointer;color:#fff;background:linear-gradient(135deg,#7c6df2,#a142f4)";
+  const close = document.createElement("button"); close.textContent = "Close";
+  close.style.cssText = "margin-top:12px;background:none;border:none;color:#9a9aac;font-size:13px;cursor:pointer";
+  close.onclick = () => ov.remove();
+  btn.onclick = async () => {
+    let ok=false;
+    try { await navigator.clipboard.writeText(code); ok=true; } catch {}
+    if (!ok){ const ta=document.createElement("textarea"); ta.value=code; ta.style.cssText="position:fixed;opacity:0"; document.body.appendChild(ta); ta.select(); try{ok=document.execCommand("copy");}catch{} ta.remove(); }
+    btn.textContent = ok ? "Copied! Now paste it into the setup page" : "Copy failed - grab it from the console";
+    btn.style.background = ok ? "#34A853" : "#d9534f";
+    if (!ok) console.log(code);
+  };
+  card.appendChild(btn); card.appendChild(document.createElement("br")); card.appendChild(close);
+  ov.appendChild(card); ov.addEventListener("click",(e)=>{ if(e.target===ov) ov.remove(); });
+  document.body.appendChild(ov);
+  console.log("%cCloudGate setup code ready - click the button on the page to copy it.", "font-weight:bold;color:#34A853");
   console.log(code);
-  if (!copied) console.log("Copy the code above manually.");
   return code;
 })();</script>
 
