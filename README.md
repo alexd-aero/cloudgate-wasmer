@@ -73,7 +73,7 @@ rather grab it from the repo.
 | --- | --- | --- | --- |
 | `CLOUDGATE_EMAIL` | yes | plain email | which account the client acts as |
 | `CLOUDGATE_REFRESH_TOKEN` | yes | long token string | authenticates to your CloudGate storage |
-| `CREDENTIALS` | strongly recommended | `"user","pass"` | HTTP Basic Auth gate over the **whole** app |
+| `CREDENTIALS` | strongly recommended | `"user","pass"` | login gate (cookie-based) over the **whole** app |
 | `REAUTH_ACCESS_TOKEN` | recommended | random string | permanent secret that unlocks the `/login` re-auth page |
 | `PORT` | no | number | listen port (Wasmer sets this; defaults to `5058`) |
 | `CLOUDGATE_STATE_DIR` | no | path | persistent dir for token/category state, if your plan provides one |
@@ -103,7 +103,11 @@ then redeploy. Keeps secrets out of git.
 Format is two double-quoted strings separated by a comma: `"user","pass"`. When
 set, **every** request — including all `/api/*` routes, which otherwise have no
 auth and operate directly on your storage (browse/upload/**download/delete**) —
-requires this username and password. If it's unset or malformed, the app logs a
+requires a login. Visitors get a `/gate` login page and, after signing in, a
+signed `HttpOnly` cookie that's sent silently on every request (no repeated
+browser popups on redirects or new tabs). Scripts can still authenticate by
+sending a preemptive `Authorization: Basic user:pass` header (e.g.
+`curl -u user:pass`). If `CREDENTIALS` is unset or malformed, the app logs a
 warning and runs with **no gate at all**, so double-check the format.
 
 ### `REAUTH_ACCESS_TOKEN` — the permanent access token

@@ -421,7 +421,7 @@
           <button class="ghost" id="new-folder-btn"><i class="fa-solid fa-folder-plus"></i> Folder</button>
           <button class="ghost" id="refresh-btn"><i class="fa-solid fa-arrows-rotate"></i></button>
           <button class="primary" id="upload-btn"><i class="fa-solid fa-upload"></i> Upload</button>
-          <input type="file" id="file-input" style="display:none">
+          <input type="file" id="file-input" multiple style="display:none">
         </div>
       </header>
       <div id="grid"></div>
@@ -1251,7 +1251,10 @@ function fileCard(f, showLocation) {
   const dlBtn = document.createElement("button");
   dlBtn.innerHTML = "<i class='fa-solid fa-download'></i>";
   dlBtn.title = "Download";
-  dlBtn.onclick = () => downloadWithProgress(f.download_url, f.filename);
+  // Open the raw CloudFront URL in a new tab. Streaming the bytes back through
+  // the serverless function (/api/download) hits its time/memory limits on
+  // anything but tiny files; the direct URL just works.
+  dlBtn.onclick = () => window.open(f.url, "_blank");
   actions.appendChild(dlBtn);
 
   const menuWrap = document.createElement("div");
@@ -1375,13 +1378,41 @@ async function deleteFile(key) {
   }
 }
 
+// Auto-detect which built-in category a file belongs to from its extension, so
+// uploads from the home view land in Photos/Videos/Music/Documents without the
+// user having to pick. Anything unrecognised goes to "document".
+const CATEGORY_BY_EXT = {
+  image: ["jpg","jpeg","png","gif","webp","svg","bmp","ico","heic","heif","tif","tiff","avif"],
+  video: ["mp4","mov","webm","mkv","avi","m4v","mpg","mpeg","wmv","flv","3gp","ts"],
+  audio: ["mp3","wav","m4a","flac","ogg","oga","aac","wma","opus","aiff","alac"],
+};
+function detectCategory(filename) {
+  const ext = (filename.split(".").pop() || "").toLowerCase();
+  for (const [cat, exts] of Object.entries(CATEGORY_BY_EXT)) {
+    if (exts.includes(ext)) return cat;
+  }
+  return "document";
+}
+
 document.getElementById("upload-btn").onclick = () => document.getElementById("file-input").click();
 
 document.getElementById("file-input").onchange = async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  const result = await uploadWithProgress(file, currentCategory, pathString());
-  if (result) { loadBrowse(); loadQuota(); } // failure already shown via the progress toast
+  const files = Array.from(e.target.files || []);
+  if (!files.length) return;
+  // Inside a category: keep uploading into it (and the current folder), so
+  // folder uploads still work. On the home view: auto-route each file by type.
+  const inBrowse = view === "browse" && currentCategory;
+  let anyOk = false;
+  for (const file of files) {
+    const category = inBrowse ? currentCategory : detectCategory(file.name);
+    const subPath = inBrowse ? pathString() : "";
+    const result = await uploadWithProgress(file, category, subPath);
+    if (result) anyOk = true;
+  }
+  if (anyOk) {
+    if (view === "home") loadAllFiles(); else loadBrowse();
+    loadQuota();
+  }
   e.target.value = "";
 };
 

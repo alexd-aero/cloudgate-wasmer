@@ -35,13 +35,21 @@ app.use((req, res, next) => {
   next();
 });
 
-// Optional global gate. If CREDENTIALS is set, require HTTP Basic Auth on
-// every request - this is what keeps the whole app private, including the
-// /api/* routes below that operate on the owner's storage with no auth of
-// their own (browse/upload/download/delete). Without this, anyone who finds
-// the deployed URL can read and delete the owner's files.
+// Optional global gate. If CREDENTIALS is set, require login before anything -
+// this keeps the whole app private, including the /api/* routes below that
+// operate on the owner's storage with no auth of their own (browse/upload/
+// download/delete). Without it, anyone who finds the deployed URL can read and
+// delete the owner's files.
 //
-// Format (matches what you set in Wasmer > Settings > Environment Variables):
+// It uses a cookie-backed login page rather than HTTP Basic Auth: Basic Auth
+// makes the browser re-pop its native dialog on redirects/new tabs/subresources
+// (and sometimes twice on first load), which is the behaviour we're fixing. A
+// signed cookie is sent automatically and silently on every request instead.
+// A preemptive `Authorization: Basic user:pass` header is still accepted so
+// curl/scripts keep working; we just never send a WWW-Authenticate challenge,
+// so no browser dialog ever appears.
+//
+// Format (set it in app.yaml env or Wasmer > Settings > Environment Variables):
 //   CREDENTIALS = "user","pass"
 // Leave CREDENTIALS unset to disable the gate (fails open, for local dev).
 function parseCredentials() {
@@ -51,7 +59,7 @@ function parseCredentials() {
 }
 const CREDS = parseCredentials();
 if (process.env.CREDENTIALS && !CREDS) {
-  console.warn('CREDENTIALS is set but not in the form "user","pass" - Basic Auth gate is DISABLED');
+  console.warn('CREDENTIALS is set but not in the form "user","pass" - login gate is DISABLED');
 }
 
 // length-independent constant-time string compare (avoids leaking length/
@@ -62,21 +70,112 @@ function safeEqual(a, b) {
   return crypto.timingSafeEqual(ah, bh);
 }
 
+// Cookie proof-of-login. It's a stable HMAC of the credentials under a server
+// secret, so no session store is needed; anyone without the exact CREDENTIALS
+// can't forge it. Keyed on REAUTH_ACCESS_TOKEN (or the creds themselves) so it
+// stays valid across restarts.
+const GATE_SECRET =
+  process.env.REAUTH_ACCESS_TOKEN || process.env.CREDENTIALS || crypto.randomBytes(32).toString("hex");
+function gateToken() {
+  return crypto.createHmac("sha256", GATE_SECRET)
+    .update("cg-gate-v1|" + (CREDS ? CREDS.user : "")).digest("hex");
+}
+function parseCookies(req) {
+  const out = {};
+  (req.headers.cookie || "").split(";").forEach((p) => {
+    const i = p.indexOf("=");
+    if (i > 0) out[p.slice(0, i).trim()] = decodeURIComponent(p.slice(i + 1).trim());
+  });
+  return out;
+}
+function hasValidCookie(req) {
+  const c = parseCookies(req).cg_gate;
+  if (!c) return false;
+  const good = gateToken();
+  return c.length === good.length && crypto.timingSafeEqual(Buffer.from(c), Buffer.from(good));
+}
+function hasValidBasic(req) {
+  const hdr = req.headers.authorization || "";
+  if (!hdr.startsWith("Basic ")) return false;
+  let d = "";
+  try { d = Buffer.from(hdr.slice(6), "base64").toString("utf-8"); } catch { return false; }
+  const i = d.indexOf(":");
+  return i >= 0 && safeEqual(d.slice(0, i), CREDS.user) && safeEqual(d.slice(i + 1), CREDS.pass);
+}
+// keep a redirect target local (no open-redirect to other sites)
+function safeNext(next) {
+  return typeof next === "string" && next.startsWith("/") && !next.startsWith("//") ? next : "/";
+}
+
 if (CREDS) {
   app.use((req, res, next) => {
-    if (req.method === "OPTIONS") return next(); // let CORS preflight through
-    const hdr = req.headers.authorization || "";
-    if (hdr.startsWith("Basic ")) {
-      let decoded = "";
-      try { decoded = Buffer.from(hdr.slice(6), "base64").toString("utf-8"); } catch { /* fall through */ }
-      const i = decoded.indexOf(":");
-      if (i >= 0 && safeEqual(decoded.slice(0, i), CREDS.user) && safeEqual(decoded.slice(i + 1), CREDS.pass)) {
-        return next();
-      }
+    if (req.method === "OPTIONS") return next();
+    if (req.path === "/gate" || req.path === "/gate/login") return next(); // login endpoints
+    if (hasValidCookie(req) || hasValidBasic(req)) return next();
+    // Not authed. Redirect real page loads to the login page; answer everything
+    // else with 401 JSON. No WWW-Authenticate header -> no native browser popup.
+    if (req.method === "GET" && (req.headers.accept || "").includes("text/html")) {
+      return res.redirect(302, "/gate?next=" + encodeURIComponent(req.originalUrl || "/"));
     }
-    res.set("WWW-Authenticate", 'Basic realm="cloudgate-client", charset="UTF-8"');
-    return res.status(401).send("Authentication required");
+    return res.status(401).json({ error: "auth_required" });
   });
+
+  app.get("/gate", (req, res) => {
+    res.type("html").send(gatePageHtml(safeNext(req.query.next)));
+  });
+  app.post("/gate/login", (req, res) => {
+    const { user, pass } = req.body || {};
+    if (typeof user === "string" && typeof pass === "string" &&
+        safeEqual(user, CREDS.user) && safeEqual(pass, CREDS.pass)) {
+      res.append("Set-Cookie",
+        `cg_gate=${gateToken()}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000; Secure`);
+      return res.json({ ok: true });
+    }
+    return res.status(401).json({ error: "invalid credentials" });
+  });
+}
+
+function gatePageHtml(next) {
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<title>Sign in</title><meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{--bg:#0a0a10;--glass:rgba(255,255,255,.06);--bd:rgba(255,255,255,.14);--text:#f4f4f8;
+--dim:#9a9aac;--accent:#7c6df2;--danger:#f2695f}
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+background:radial-gradient(1000px 500px at 80% -10%,#17172a,var(--bg) 60%);color:var(--text);
+display:flex;align-items:center;justify-content:center;padding:24px}
+.card{width:360px;max-width:92vw;background:var(--glass);border:1px solid var(--bd);
+border-radius:18px;padding:30px 26px;backdrop-filter:blur(20px);box-shadow:0 8px 32px rgba(0,0,0,.35)}
+.logo{width:46px;height:46px;border-radius:13px;margin:0 auto 16px;display:flex;align-items:center;
+justify-content:center;font-size:21px;color:#fff;background:linear-gradient(140deg,#4285F4,#A142F4)}
+h1{font-size:18px;margin:0 0 18px;text-align:center}
+input{width:100%;background:rgba(0,0,0,.32);color:var(--text);border:1px solid var(--bd);
+border-radius:10px;padding:11px 13px;font-size:14px;margin-bottom:12px}
+input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(124,109,242,.16)}
+button{width:100%;background:var(--accent);color:#fff;border:none;border-radius:10px;padding:12px;
+font-size:14px;font-weight:600;cursor:pointer}button:disabled{opacity:.6}
+#err{color:var(--danger);font-size:12.5px;min-height:16px;margin-top:10px;text-align:center}
+</style></head><body>
+<form class="card" id="f">
+<div class="logo">&#128274;</div><h1>Sign in to CloudGate</h1>
+<input id="u" placeholder="Username" autocomplete="username" autofocus>
+<input id="p" type="password" placeholder="Password" autocomplete="current-password">
+<button type="submit">Sign in</button><div id="err"></div>
+</form>
+<script>
+var NEXT=${JSON.stringify(next)};
+document.getElementById("f").addEventListener("submit",async function(e){
+  e.preventDefault();var b=e.target.querySelector("button");var err=document.getElementById("err");
+  b.disabled=true;err.textContent="";
+  try{
+    var r=await fetch("/gate/login",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({user:document.getElementById("u").value,pass:document.getElementById("p").value})});
+    if(!r.ok){err.textContent="Wrong username or password.";b.disabled=false;return;}
+    window.location.href=NEXT||"/";
+  }catch(_){err.textContent="Something went wrong. Try again.";b.disabled=false;}
+});
+</script></body></html>`;
 }
 
 app.use(express.static(path.join(__dirname, "..", "public")));
