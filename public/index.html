@@ -838,9 +838,55 @@ async function uploadWithProgress(file, category, subPath) {
     }
     return await uploadMultipart(file, category, subPath);
   } catch (e) {
-    finishProgress(false, e.message || "Upload failed");
-    return null;
+    // The fast paths PUT straight to S3's own domain. Behind a proxy the
+    // browser often can't reach S3 directly (or the proxy mangles the signed
+    // request -> HTTP 400/404), while requests to this app's own origin still
+    // work. Fall back to streaming the bytes through the server, which only
+    // ever talks to same-origin /api/upload.
+    try {
+      showProgressLabel("Retrying via server...");
+      return await uploadViaServer(file, category, subPath);
+    } catch (e2) {
+      finishProgress(false, e2.message || e.message || "Upload failed");
+      return null;
+    }
   }
+}
+
+// Same-origin upload: bytes go to /api/upload and the server forwards them to
+// S3. Slower and bounded by the serverless function's memory/time (so very
+// large files may still fail here), but it's the only path that works when the
+// client can't reach S3 directly - e.g. through a proxy.
+function uploadViaServer(file, category, subPath) {
+  showProgress("Uploading " + file.name + " (via server)");
+  updateProgress(0);
+  return new Promise((resolve, reject) => {
+    const form = new FormData();
+    form.append("category", category);       // text fields before the file so
+    form.append("path", subPath || "");      // multer has them when the file lands
+    form.append("file", file, file.name);
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/upload");          // same origin -> passes through a proxy
+    xhr.upload.onprogress = (e) => {
+      if (!e.lengthComputable) return;
+      if (e.loaded < e.total) updateProgress(e.loaded / e.total);
+      else { showProgressLabel("Finalizing " + file.name + "..."); updateProgress(null); }
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        let body = {};
+        try { body = JSON.parse(xhr.responseText); } catch (_) {}
+        finishProgress(true, "Uploaded " + file.name);
+        resolve({key: body.key});
+      } else {
+        let msg = "Upload failed (HTTP " + xhr.status + ")";
+        try { const b = JSON.parse(xhr.responseText); if (b.error) msg = b.error; } catch (_) {}
+        reject(new Error(msg));
+      }
+    };
+    xhr.onerror = () => reject(new Error("Network error during upload"));
+    xhr.send(form);
+  });
 }
 
 // One presigned PUT for the whole file. XHR fires progress up to 100% when
