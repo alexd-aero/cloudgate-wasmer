@@ -344,21 +344,15 @@
 
 <div id="link-modal-overlay">
   <div id="link-modal-box" class="glass">
-    <div style="font-weight:600;font-size:15px;">Raw URL</div>
+    <div style="font-weight:600;font-size:15px;">Direct download link</div>
 
-    <div class="link-field-label">CloudFront (direct)</div>
+    <div class="link-field-label">CloudFront (public, no login needed)</div>
     <div class="link-field-row">
       <input id="link-url-input" readonly>
       <button class="ghost" id="link-copy-btn" title="Copy"><i class="fa-solid fa-copy"></i></button>
     </div>
 
-    <div class="link-field-label">This app (same content, stable path)</div>
-    <div class="link-field-row">
-      <input id="link-stream-input" readonly>
-      <button class="ghost" id="link-stream-copy-btn" title="Copy"><i class="fa-solid fa-copy"></i></button>
-    </div>
-
-    <div class="link-hint">Chrome downloads media instead of playing it when a script opens the tab - copy the link and paste it into a new tab yourself to view it.</div>
+    <div class="link-hint">This is the raw CloudFront URL - it works without logging in. Chrome downloads media instead of playing it when a script opens the tab, so copy the link and paste it into a new tab yourself to view it.</div>
 
     <div id="modal-actions" style="display:flex;justify-content:flex-end;margin-top:14px;">
       <button class="ghost" id="link-close-btn">Close</button>
@@ -654,15 +648,12 @@ function confirmModal(message) {
 const linkModalOverlay = document.getElementById("link-modal-overlay");
 function showRawUrlModal(f) {
   const urlInput = document.getElementById("link-url-input");
-  const streamInput = document.getElementById("link-stream-input");
-  urlInput.value = f.url;
-  streamInput.value = window.location.origin + f.stream_path;
+  urlInput.value = f.url; // direct CloudFront URL - public, works without login
   // No "Open" button on purpose: window.open() to a media URL makes Chrome
-  // download it instead of playing/displaying it, even with correct
-  // headers. A manually pasted/typed URL doesn't hit that path, so these
-  // are copy-only - clicking the field just selects the text for easy copying.
+  // download it instead of playing/displaying it, even with correct headers.
+  // A manually pasted/typed URL doesn't hit that path, so this is copy-only -
+  // clicking the field just selects the text for easy copying.
   urlInput.onclick = () => urlInput.select();
-  streamInput.onclick = () => streamInput.select();
   linkModalOverlay.classList.add("active");
 }
 document.getElementById("link-close-btn").onclick = () => linkModalOverlay.classList.remove("active");
@@ -679,7 +670,6 @@ async function copyInputValue(inputId) {
   toast("Copied to clipboard");
 }
 document.getElementById("link-copy-btn").onclick = () => copyInputValue("link-url-input");
-document.getElementById("link-stream-copy-btn").onclick = () => copyInputValue("link-stream-input");
 
 // ---------- Preview (streaming playback via CloudFront directly) ----------
 
