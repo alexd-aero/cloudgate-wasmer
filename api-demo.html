@@ -88,8 +88,12 @@
 <p class="sub">One HTML file, no build step - exercises every endpoint in API_DOCS.md against a live deployed CloudGate client. Open this file directly (double-click it) - CORS is enabled on the API so it works from file:// too.</p>
 
 <div class="base-url-row">
-  <input id="base-url" value="https://cloudgate-wsmr.wasmer.app">
+  <input id="base-url" placeholder="https://your-app.wasmer.app">
   <button onclick="run('profile')">Test connection</button>
+</div>
+<div class="base-url-row">
+  <input id="auth-user" placeholder="username (from CREDENTIALS)" autocomplete="off">
+  <input id="auth-pass" type="password" placeholder="password (from CREDENTIALS)" autocomplete="off">
 </div>
 
 <section>
@@ -242,14 +246,37 @@
 </section>
 
 <script>
-function baseUrl() { return document.getElementById("base-url").value.replace(/\/$/, ""); }
+function baseUrl() { return document.getElementById("base-url").value.trim().replace(/\/$/, ""); }
 
-async function api(path, opts) {
-  const res = await fetch(baseUrl() + path, opts);
+// If the app has a CREDENTIALS login gate, send a preemptive Basic auth header
+// (the server accepts that without ever challenging the browser). Left off when
+// both fields are empty, so an ungated app still works.
+function authHeaders() {
+  const u = document.getElementById("auth-user").value;
+  const p = document.getElementById("auth-pass").value;
+  if (!u && !p) return {};
+  return { Authorization: "Basic " + btoa(unescape(encodeURIComponent(u + ":" + p))) };
+}
+
+async function api(path, opts = {}) {
+  if (!baseUrl()) throw new Error("Enter your app URL (https://your-app.wasmer.app) up top first.");
+  const headers = Object.assign({}, opts.headers || {}, authHeaders());
+  const res = await fetch(baseUrl() + path, Object.assign({}, opts, { headers }));
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error || res.statusText);
+  if (!res.ok) {
+    if (res.status === 401) throw new Error("Unauthorized - check the username/password.");
+    throw new Error(body.error || res.statusText);
+  }
   return body;
 }
+
+// Remember what you typed (this is your own personal demo tool).
+["base-url", "auth-user", "auth-pass"].forEach((id) => {
+  const el = document.getElementById(id);
+  const saved = localStorage.getItem("cgdemo:" + id);
+  if (saved) el.value = saved;
+  el.addEventListener("input", () => localStorage.setItem("cgdemo:" + id, el.value));
+});
 
 function show(id, data) {
   document.getElementById(id).textContent = JSON.stringify(data, null, 2);
